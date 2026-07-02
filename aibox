@@ -1,0 +1,369 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+set -euo pipefail
+
+readonly VERSION="0.1.0"
+readonly PROGRAM_NAME="aibox"
+readonly SANDBOX_AIBOX_DIR="/run/aibox/bin"
+readonly SANDBOX_AIBOX_PATH="${SANDBOX_AIBOX_DIR}/aibox"
+
+usage() {
+    printf '%s\n' \
+        "Usage:" \
+        "  aibox [--] [COMMAND [ARGS...]]" \
+        "  aibox -p|--dump-prompt" \
+        "  aibox --help" \
+        "  aibox --version" \
+        "" \
+        "Runs COMMAND in a lightweight Bubblewrap sandbox:" \
+        "  - current directory is mounted read/write at the same absolute path" \
+        "  - host network is shared" \
+        "  - \$HOME exists at the same path, but starts as sandbox-private tmpfs" \
+        "  - selected agent/Nix/direnv state is mounted back in" \
+        "  - inherited environment variables remain visible inside the sandbox" \
+        "" \
+        "Run from a project directory. If COMMAND is omitted, \$SHELL is used." \
+        "Inside the sandbox, run 'aibox -p' to show agent guidance." \
+        "" \
+        "Examples:" \
+        "  aibox codex" \
+        "  aibox claude" \
+        "  aibox copilot" \
+        "  aibox -- bash"
+}
+
+dump_prompt() {
+    printf '%s\n' \
+        "You are running inside an aibox sandbox." \
+        "aibox public repo: https://github.com/ruifm/aibox" \
+        "" \
+        "- Treat the current working directory as the project workspace and the only intended writable project tree." \
+        "- Network access is available." \
+        "- Real agent state may be mounted, but broad host home/config state is not available." \
+        "- Do not install tools globally with apt, brew, npm -g, pipx, cargo install, or similar unless explicitly asked." \
+        "- When a tool is missing, add it declaratively to the project's Nix devShell, then run direnv reload or nix develop as appropriate." \
+        "- If the project has no .envrc and no Nix devShell file, bootstrap one with a minimal flake.nix devShell and an .envrc containing 'use flake'; run direnv allow once before adding tools." \
+        "- Keep tooling changes in project files such as flake.nix, shell.nix, devshell.nix, or the existing local equivalent." \
+        "- Generic \$HOME cache/config/local writes are sandbox-private unless a path is explicitly mounted by aibox." \
+        "- You can run 'aibox -p' or 'aibox --dump-prompt' again to show these instructions."
+}
+
+die() {
+    printf '%s: %s\n' "${PROGRAM_NAME}" "$*" >&2
+    exit 1
+}
+
+need_cmd() {
+    command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
+}
+
+add_dir() {
+    local path=$1
+    [[ "$path" == /* ]] || die "sandbox path is not absolute: $path"
+    [[ "$path" == / ]] && return 0
+
+    local parent
+    parent=$(dirname "$path")
+    add_dir "$parent"
+
+    if [[ -z "${made_dirs[$path]+x}" ]]; then
+        bwrap_args+=(--dir "$path")
+        made_dirs[$path]=1
+    fi
+}
+
+add_parent_dir() {
+    local path=$1
+    [[ "$path" == /* ]] || die "sandbox path is not absolute: $path"
+    add_dir "$(dirname "$path")"
+}
+
+add_tmpfs() {
+    local dest=$1
+    [[ "$dest" == /* ]] || die "tmpfs destination is not absolute: $dest"
+    add_parent_dir "$dest"
+    bwrap_args+=(--tmpfs "$dest")
+    made_dirs[$dest]=1
+}
+
+add_bind() {
+    local src=$1
+    local dest=${2:-$1}
+    [[ -e "$src" || -L "$src" ]] || return 0
+    [[ "$dest" == /* ]] || die "bind destination is not absolute: $dest"
+    add_parent_dir "$dest"
+    bwrap_args+=(--bind "$src" "$dest")
+}
+
+add_ro_bind() {
+    local src=$1
+    local dest=${2:-$1}
+    [[ -e "$src" || -L "$src" ]] || return 0
+    [[ "$dest" == /* ]] || die "bind destination is not absolute: $dest"
+    add_parent_dir "$dest"
+    bwrap_args+=(--ro-bind "$src" "$dest")
+}
+
+add_symlink() {
+    local target=$1
+    local dest=$2
+    [[ "$dest" == /* ]] || die "symlink destination is not absolute: $dest"
+    add_parent_dir "$dest"
+    bwrap_args+=(--symlink "$target" "$dest")
+}
+
+add_host_symlink_or_ro_bind() {
+    local path=$1
+    if [[ -L "$path" ]]; then
+        add_symlink "$(readlink "$path")" "$path"
+    else
+        add_ro_bind "$path" "$path"
+    fi
+}
+
+parse_args() {
+    while (($# > 0)); do
+        case "$1" in
+            -h | --help)
+                usage
+                exit 0
+                ;;
+            --version)
+                printf '%s %s\n' "${PROGRAM_NAME}" "${VERSION}"
+                exit 0
+                ;;
+            -p | --dump-prompt)
+                dump_prompt
+                exit 0
+                ;;
+            --)
+                shift
+                break
+                ;;
+            -*)
+                die "unknown option: $1"
+                ;;
+            *)
+                break
+                ;;
+        esac
+    done
+
+    command_args=("$@")
+    if ((${#command_args[@]} == 0)); then
+        command_args=("${SHELL:-/bin/sh}")
+    fi
+}
+
+init_paths() {
+    host_home=${HOME:?HOME must be set}
+    host_home=$(realpath -m "$host_home")
+    cwd_dest=$(pwd -P)
+    cwd_src=$(realpath -e "$cwd_dest")
+    cwd_dest=$cwd_src
+
+    [[ "$cwd_dest" == /* ]] || die "current directory must resolve to an absolute path"
+    [[ "$host_home" == /* ]] || die "HOME must resolve to an absolute path"
+
+    if [[ "$cwd_dest" == / ]]; then
+        die "refusing to bind / as the writable workspace; cd into a project directory first"
+    fi
+
+    if [[ "$cwd_dest" == "$host_home" ]]; then
+        die "refusing to bind HOME as the writable workspace; cd into a project directory first"
+    fi
+}
+
+resolve_program_path() {
+    local source=${BASH_SOURCE[0]}
+    if [[ -e "$source" || -L "$source" ]]; then
+        program_path=$(realpath -e "$source")
+        return 0
+    fi
+
+    local resolved
+    resolved=$(command -v -- "$source") || die "could not resolve ${PROGRAM_NAME} path"
+    program_path=$(realpath -e "$resolved")
+}
+
+ensure_host_dir() {
+    local path=$1
+    if [[ -L "$path" && ! -e "$path" ]]; then
+        die "expected directory but found broken symlink: $path; remove or rename the conflicting path"
+    fi
+    if [[ -e "$path" && ! -d "$path" ]]; then
+        die "expected directory but found non-directory: $path; remove or rename the conflicting path"
+    fi
+    mkdir -p "$path"
+}
+
+ensure_host_file() {
+    local path=$1
+    local initial_content=$2
+    if [[ -L "$path" && ! -e "$path" ]]; then
+        die "expected file but found broken symlink: $path; remove or rename the conflicting path"
+    fi
+    if [[ -e "$path" && ! -f "$path" ]]; then
+        die "expected file but found non-file: $path; remove or rename the conflicting path"
+    fi
+    if [[ ! -e "$path" ]]; then
+        ensure_host_dir "$(dirname "$path")"
+        printf '%s\n' "$initial_content" >"$path"
+    fi
+}
+
+prepare_host_state() {
+    [[ -d "$host_home" ]] || die "HOME is not a directory: $host_home"
+
+    local path
+    for path in \
+        "$host_home/.codex" \
+        "$host_home/.claude" \
+        "$host_home/.copilot" \
+        "$host_home/.config/claude" \
+        "$host_home/.config/claude-code" \
+        "$host_home/.config/github-copilot" \
+        "$host_home/.local/share/direnv" \
+        "$host_home/.cache/direnv"; do
+        ensure_host_dir "$path"
+    done
+
+    ensure_host_file "$host_home/.claude.json" "{}"
+}
+
+build_bwrap_args() {
+    bwrap_args=(
+        --die-with-parent
+        --unshare-all
+        --share-net
+        --unshare-user
+        --disable-userns
+        --new-session
+        --hostname aibox
+    )
+    made_dirs=()
+
+    bwrap_args+=(--proc /proc --dev /dev)
+    add_tmpfs /tmp
+    add_dir /var
+    add_tmpfs /var/tmp
+    add_dir "$host_home"
+    add_tmpfs "$host_home/.cache"
+    add_tmpfs "$host_home/.config"
+    add_tmpfs "$host_home/.local"
+
+    add_ro_bind /usr /usr
+    local top
+    for top in /bin /lib /lib64; do
+        if [[ -L "$top" ]]; then
+            add_symlink "$(readlink "$top")" "$top"
+        else
+            add_ro_bind "$top" "$top"
+        fi
+    done
+
+    add_ro_bind /nix/store /nix/store
+    add_bind /nix/var/nix/daemon-socket/socket /nix/var/nix/daemon-socket/socket
+    add_ro_bind /nix/var/nix/profiles /nix/var/nix/profiles
+    add_ro_bind "$host_home/.config/nix" "$host_home/.config/nix"
+
+    if [[ -e "$host_home/.local/state/nix/profiles" || -L "$host_home/.local/state/nix/profiles" ]]; then
+        add_ro_bind "$host_home/.local/state/nix/profiles" "$host_home/.local/state/nix/profiles"
+    fi
+    if [[ -e "$host_home/.nix-profile" || -L "$host_home/.nix-profile" ]]; then
+        add_host_symlink_or_ro_bind "$host_home/.nix-profile"
+    fi
+
+    add_ro_bind "$program_path" "$SANDBOX_AIBOX_PATH"
+
+    add_bind "$cwd_src" "$cwd_dest"
+
+    local path
+    for path in \
+        "$host_home/.codex" \
+        "$host_home/.claude" \
+        "$host_home/.claude.json" \
+        "$host_home/.copilot" \
+        "$host_home/.config/claude" \
+        "$host_home/.config/claude-code" \
+        "$host_home/.config/github-copilot"; do
+        add_bind "$path" "$path"
+    done
+
+    add_ro_bind "$host_home/.config/direnv" "$host_home/.config/direnv"
+    add_bind "$host_home/.local/share/direnv" "$host_home/.local/share/direnv"
+    add_bind "$host_home/.cache/direnv" "$host_home/.cache/direnv"
+
+    for path in \
+        /etc/passwd \
+        /etc/group \
+        /etc/nsswitch.conf \
+        /etc/hosts \
+        /etc/resolv.conf \
+        /etc/localtime \
+        /etc/locale.conf \
+        /etc/nix \
+        /etc/ssl \
+        /etc/ca-certificates \
+        /etc/pki; do
+        add_ro_bind "$path" "$path"
+    done
+
+    env_args=(
+        --setenv HOME "$host_home"
+        --setenv XDG_CONFIG_HOME "$host_home/.config"
+        --setenv XDG_CACHE_HOME "$host_home/.cache"
+        --setenv XDG_DATA_HOME "$host_home/.local/share"
+        --setenv XDG_STATE_HOME "$host_home/.local/state"
+        --setenv PATH "${SANDBOX_AIBOX_DIR}:${PATH:-/usr/local/bin:/usr/bin:/bin}"
+        --setenv TMPDIR /tmp
+        --unsetenv SSH_AUTH_SOCK
+        --unsetenv GPG_AGENT_INFO
+        --unsetenv GNUPGHOME
+        --unsetenv DBUS_SESSION_BUS_ADDRESS
+        --unsetenv XDG_RUNTIME_DIR
+        --unsetenv DOCKER_HOST
+        --unsetenv KUBECONFIG
+        --unsetenv COPILOT_HOME
+        --unsetenv NIX_REMOTE
+    )
+
+    if [[ -S /nix/var/nix/daemon-socket/socket ]]; then
+        env_args+=(--setenv NIX_REMOTE daemon)
+    fi
+
+    bwrap_args+=(--remount-ro / "${env_args[@]}" --chdir "$cwd_dest")
+}
+
+print_command() {
+    printf >&2 '%s: exec ' "${PROGRAM_NAME}"
+    printf >&2 '%q ' bwrap "${bwrap_args[@]}" -- "${command_args[@]}"
+    printf >&2 '\n'
+}
+
+main() {
+    declare -ga command_args=()
+    declare -g host_home cwd_src cwd_dest program_path
+    declare -ga bwrap_args=()
+    declare -ga env_args=()
+    declare -gA made_dirs=()
+
+    parse_args "$@"
+
+    need_cmd bwrap
+    need_cmd dirname
+    need_cmd mkdir
+    need_cmd pwd
+    need_cmd readlink
+    need_cmd realpath
+
+    init_paths
+    resolve_program_path
+    prepare_host_state
+    build_bwrap_args
+    print_command
+
+    exec bwrap "${bwrap_args[@]}" -- "${command_args[@]}"
+}
+
+main "$@"

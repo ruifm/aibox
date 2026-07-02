@@ -1,0 +1,29 @@
+# aibox task runner
+
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+project := "aibox"
+bash_files := "aibox"
+
+fmt:
+    shfmt -w -i 4 -ci {{bash_files}}
+
+lint:
+    shellcheck {{bash_files}}
+    shfmt -d -i 4 -ci {{bash_files}}
+
+test-unit:
+    bats tests/unit.bats
+
+test-integration:
+    bats tests/integration.bats
+
+check: fmt lint test-unit
+
+install:
+    mkdir -p "${HOME}/.local/bin"
+    install -m 0755 {{project}} "${HOME}/.local/bin/{{project}}"
+    @echo "Installed: ${HOME}/.local/bin/{{project}}"
+
+clean-test-artifacts:
+    rm -rf .test-work

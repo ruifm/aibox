@@ -1,0 +1,4 @@
+.direnv/
+.test-work/
+result
+result-*

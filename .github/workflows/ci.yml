@@ -1,0 +1,41 @@
+---
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/determinate-nix-action@v3
+
+      - name: Allow Bubblewrap user namespaces in CI
+        run: |
+          sudo sysctl -w kernel.unprivileged_userns_clone=1 || true
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0 || true
+
+      - name: Nix flake checks
+        run: nix flake check -L
+
+      - name: Development checks
+        run: nix develop -c just check
+
+      - name: Integration tests
+        run: nix develop -c just test-integration
+
+      - name: Verify generated changes are committed
+        run: |
+          if ! git diff --quiet; then
+            echo "::error::checks produced uncommitted changes"
+            git --no-pager diff
+            exit 1
+          fi
