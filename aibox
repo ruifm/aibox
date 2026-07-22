@@ -336,7 +336,7 @@ build_bwrap_args() {
 }
 
 print_command() {
-    printf >&2 '%s: exec ' "${PROGRAM_NAME}"
+    printf >&2 '%s: ' "${PROGRAM_NAME}"
     printf >&2 '%q ' bwrap "${bwrap_args[@]}" -- "${command_args[@]}"
     printf >&2 '\n'
 }
@@ -363,7 +363,7 @@ main() {
     build_bwrap_args
     print_command
 
-    exec bwrap "${bwrap_args[@]}" -- "${command_args[@]}"
+    bwrap "${bwrap_args[@]}" -- "${command_args[@]}"
 }
 
 main "$@"

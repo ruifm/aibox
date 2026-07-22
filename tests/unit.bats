@@ -9,6 +9,7 @@ setup() {
     export TEST_PROJECT="${BATS_TEST_TMPDIR}/project"
     export FAKE_BIN="${BATS_TEST_TMPDIR}/bin"
     export AIBOX_FAKE_BWRAP_LOG="${BATS_TEST_TMPDIR}/bwrap.argv"
+    export AIBOX_FAKE_BWRAP_PARENT_LOG="${BATS_TEST_TMPDIR}/bwrap-parent.argv"
 
     mkdir -p \
         "$TEST_PROJECT" \
@@ -35,6 +36,10 @@ setup() {
         printf '#!%s\n' "$(command -v bash)"
         cat <<'EOF'
 printf '%s\n' "$@" >"${AIBOX_FAKE_BWRAP_LOG:?}"
+while IFS= read -r -d '' arg; do
+    printf '%s\n' "$arg"
+done <"/proc/${PPID}/cmdline" >"${AIBOX_FAKE_BWRAP_PARENT_LOG:?}"
+exit "${AIBOX_FAKE_BWRAP_STATUS:-0}"
 EOF
     } >"$FAKE_BIN/bwrap"
     chmod +x "$FAKE_BIN/bwrap"
@@ -109,8 +114,21 @@ refute_arg() {
 @test "prints bwrap command before running it" {
     run_aibox true
     [ "$status" -eq 0 ]
-    [[ "$output" == *"aibox: exec bwrap "* ]]
+    [[ "$output" == *"aibox: bwrap "* ]]
     assert_arg "true"
+}
+
+@test "keeps aibox as the bwrap parent process" {
+    run_aibox true
+    [ "$status" -eq 0 ]
+    sed -n '2p' "$AIBOX_FAKE_BWRAP_PARENT_LOG" | grep -Fxq "$AIBOX"
+}
+
+@test "returns the bwrap exit status" {
+    export AIBOX_FAKE_BWRAP_STATUS=42
+
+    run_aibox true
+    [ "$status" -eq 42 ]
 }
 
 @test "binds current directory at the same absolute path" {
