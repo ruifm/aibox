@@ -15,15 +15,21 @@ on exit, no per-session agent binary drift, and no runtime configuration file.
 aibox codex
 aibox claude
 aibox copilot
+aibox hermes
+aibox omp
 aibox opencode
+aibox pi
 aibox ori codex
 aibox -- bash
 ```
 
 Supported agent state/config policy is maintained for Codex, Claude Code,
-GitHub Copilot CLI, and [OpenCode](https://opencode.ai/docs/). OpenRouter
-support uses Ori. Other commands can be useful for debugging, but they are
-best-effort and do not get dedicated persistent state/config mounts.
+GitHub Copilot CLI, [Hermes](https://github.com/NousResearch/hermes-agent),
+[OMP](https://github.com/can1357/oh-my-pi),
+[OpenCode](https://opencode.ai/docs/), and
+[Pi](https://github.com/earendil-works/pi). OpenRouter support uses Ori. Other
+commands can be useful for debugging, but they are best-effort and do not get
+dedicated persistent state/config mounts.
 
 ## Install
 
@@ -125,9 +131,10 @@ aibox -p
 - [direnv](https://direnv.net/) and Nix devShells for the recommended workflow.
 
 For an agent session, install the supported agent command you intend to run
-(`codex`, `claude`, `copilot`, `opencode`, or `ori`) somewhere the sandbox can
-see it: the project Nix devShell, a Nix profile, or the host system paths
-mounted read-only at `/usr` and `/bin`. Ori also needs the target agent command.
+(`codex`, `claude`, `copilot`, `hermes`, `omp`, `opencode`, `pi`, or `ori`)
+somewhere the sandbox can see it: the project Nix devShell, a Nix profile, or
+the host system paths mounted read-only at `/usr` and `/bin`. Ori also needs the
+target agent command.
 
 ## How It Works
 
@@ -165,6 +172,9 @@ Persistent agent state/config mounts:
 - `~/.config/anthropic`
 - `~/.copilot`
 - `~/.cache/copilot`
+- `~/.hermes`
+- `~/.omp`
+- `~/.pi`
 - `~/.cache/opencode`
 - `~/.config/opencode`
 - `~/.local/share/opencode`
@@ -188,18 +198,32 @@ MCP, session, and log data. It uses `~/.local/state/opencode` for state and
 `~/.cache/opencode` for downloaded tools and plugin packages. Project
 `.opencode` files are available through the project mount.
 
+Hermes keeps its config, credentials, sessions, memories, skills, plugins, and
+managed tools in `~/.hermes`. OMP keeps its config and default state in
+`~/.omp`. Pi keeps its config, credentials, sessions, packages, skills, and
+extensions in `~/.pi`.
+
+OMP can move data, state, and cache to `~/.local/share/omp`,
+`~/.local/state/omp`, and `~/.cache/omp`. `aibox` mounts these paths when they
+already exist. It does not create them because OMP uses their existence to
+decide if XDG migration is complete. Run `omp config init-xdg` outside `aibox`
+if you want to migrate an existing OMP profile.
+
 System agent config mounts are read-only and are added only when they exist:
 
 - `/etc/codex`
 - `/etc/claude-code`
 - `/etc/github-copilot`
+- `/etc/hermes`
 - `/etc/opencode`
 
 `aibox` uses the default agent state paths. It removes `CODEX_HOME`,
 `CODEX_SQLITE_HOME`, `CLAUDE_CONFIG_DIR`, `ANTHROPIC_CONFIG_DIR`,
-`COPILOT_HOME`, `COPILOT_CACHE_HOME`, and `OPENCODE_CONFIG_DIR` inside the
-sandbox. It does not use environment variables to add mounts. Profile
-selectors such as `ANTHROPIC_PROFILE` still pass through.
+`COPILOT_HOME`, `COPILOT_CACHE_HOME`, `HERMES_HOME`, `HERMES_MANAGED_DIR`,
+`PI_CONFIG_DIR`, `PI_CODING_AGENT_DIR`, `PI_CODING_AGENT_SESSION_DIR`,
+`PI_SERVER_DIR`, and `OPENCODE_CONFIG_DIR` inside the sandbox. It does not use
+environment variables to add mounts. Profile variables such as
+`ANTHROPIC_PROFILE`, `HERMES_PROFILE`, and `OMP_PROFILE` still pass through.
 
 `OPENCODE_CONFIG` and `OPENCODE_TUI_CONFIG` also pass through. The file must be
 in the project or another path that the sandbox can read.

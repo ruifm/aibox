@@ -20,8 +20,12 @@ setup() {
         "$TEST_HOME/.codex" \
         "$TEST_HOME/.claude" \
         "$TEST_HOME/.copilot" \
+        "$TEST_HOME/.hermes" \
+        "$TEST_HOME/.omp" \
         "$TEST_HOME/.ori" \
+        "$TEST_HOME/.pi" \
         "$TEST_HOME/.cache/copilot" \
+        "$TEST_HOME/.cache/omp" \
         "$TEST_HOME/.cache/opencode" \
         "$TEST_HOME/.config/anthropic" \
         "$TEST_HOME/.config/opencode" \
@@ -32,7 +36,9 @@ setup() {
         "$TEST_HOME/.config/git" \
         "$TEST_HOME/.config/direnv" \
         "$TEST_HOME/.local/share/direnv" \
+        "$TEST_HOME/.local/share/omp" \
         "$TEST_HOME/.local/share/opencode" \
+        "$TEST_HOME/.local/state/omp" \
         "$TEST_HOME/.local/state/opencode" \
         "$TEST_HOME/.cache/direnv"
 
@@ -108,6 +114,9 @@ assert_arg_sequence() {
     [[ "$output" == *"Usage:"* ]]
     [[ "$output" == *"aibox -p|--dump-prompt"* ]]
     [[ "$output" == *"Run from the repository root"* ]]
+    [[ "$output" == *"aibox hermes"* ]]
+    [[ "$output" == *"aibox omp"* ]]
+    [[ "$output" == *"aibox pi"* ]]
     [[ "$output" == *"aibox opencode"* ]]
 }
 
@@ -122,7 +131,7 @@ assert_arg_sequence() {
     [[ "$output" == *"run direnv allow once before adding tools"* ]]
     [[ "$output" == *"Project files above it are not visible"* ]]
     [[ "$output" == *"Custom agent state path environment variables are removed"* ]]
-    [[ "$output" == *"OpenCode paths"* ]]
+    [[ "$output" == *"Hermes, OMP, OpenCode, and Pi paths"* ]]
 }
 
 @test "-p dumps prompt" {
@@ -209,12 +218,18 @@ assert_arg_sequence() {
     assert_arg "$TEST_HOME/.codex"
     assert_arg "$TEST_HOME/.claude"
     assert_arg "$TEST_HOME/.copilot"
+    assert_arg "$TEST_HOME/.hermes"
+    assert_arg "$TEST_HOME/.omp"
     assert_arg "$TEST_HOME/.ori"
+    assert_arg "$TEST_HOME/.pi"
     assert_arg "$TEST_HOME/.cache/copilot"
+    assert_arg "$TEST_HOME/.cache/omp"
     assert_arg "$TEST_HOME/.cache/opencode"
     assert_arg "$TEST_HOME/.config/anthropic"
     assert_arg "$TEST_HOME/.config/opencode"
+    assert_arg "$TEST_HOME/.local/share/omp"
     assert_arg "$TEST_HOME/.local/share/opencode"
+    assert_arg "$TEST_HOME/.local/state/omp"
     assert_arg "$TEST_HOME/.local/state/opencode"
 
     refute_arg "$TEST_HOME/.config/claude"
@@ -236,6 +251,7 @@ assert_arg_sequence() {
     assert_arg_sequence --ro-bind-try /etc/codex /etc/codex
     assert_arg_sequence --ro-bind-try /etc/claude-code /etc/claude-code
     assert_arg_sequence --ro-bind-try /etc/github-copilot /etc/github-copilot
+    assert_arg_sequence --ro-bind-try /etc/hermes /etc/hermes
     assert_arg_sequence --ro-bind-try /etc/opencode /etc/opencode
 }
 
@@ -247,6 +263,12 @@ assert_arg_sequence() {
         ANTHROPIC_CONFIG_DIR=/host/anthropic \
         COPILOT_HOME=/host/copilot \
         COPILOT_CACHE_HOME=/host/copilot-cache \
+        HERMES_HOME=/host/hermes \
+        HERMES_MANAGED_DIR=/host/hermes-managed \
+        PI_CONFIG_DIR=foreign-omp \
+        PI_CODING_AGENT_DIR=/host/pi-agent \
+        PI_CODING_AGENT_SESSION_DIR=/host/pi-session \
+        PI_SERVER_DIR=/host/pi-server \
         OPENCODE_CONFIG_DIR=/host/opencode \
         bash -c 'cd "$1" && HOME="$2" SHELL=/bin/sh bash "$3" -- true' \
         _ "$TEST_PROJECT" "$TEST_HOME" "$AIBOX"
@@ -258,6 +280,12 @@ assert_arg_sequence() {
     assert_arg_sequence --unsetenv ANTHROPIC_CONFIG_DIR
     assert_arg_sequence --unsetenv COPILOT_HOME
     assert_arg_sequence --unsetenv COPILOT_CACHE_HOME
+    assert_arg_sequence --unsetenv HERMES_HOME
+    assert_arg_sequence --unsetenv HERMES_MANAGED_DIR
+    assert_arg_sequence --unsetenv PI_CONFIG_DIR
+    assert_arg_sequence --unsetenv PI_CODING_AGENT_DIR
+    assert_arg_sequence --unsetenv PI_CODING_AGENT_SESSION_DIR
+    assert_arg_sequence --unsetenv PI_SERVER_DIR
     assert_arg_sequence --unsetenv OPENCODE_CONFIG_DIR
 
     refute_arg /host/codex
@@ -266,6 +294,11 @@ assert_arg_sequence() {
     refute_arg /host/anthropic
     refute_arg /host/copilot
     refute_arg /host/copilot-cache
+    refute_arg /host/hermes
+    refute_arg /host/hermes-managed
+    refute_arg /host/pi-agent
+    refute_arg /host/pi-session
+    refute_arg /host/pi-server
     refute_arg /host/opencode
 }
 
@@ -291,14 +324,20 @@ assert_arg_sequence() {
     [ -d "$fresh_home/.codex" ]
     [ -d "$fresh_home/.claude" ]
     [ -d "$fresh_home/.copilot" ]
+    [ -d "$fresh_home/.hermes" ]
+    [ -d "$fresh_home/.omp" ]
     [ -d "$fresh_home/.ori" ]
+    [ -d "$fresh_home/.pi" ]
     [ -d "$fresh_home/.cache/copilot" ]
     [ -d "$fresh_home/.cache/opencode" ]
+    [ ! -e "$fresh_home/.cache/omp" ]
     [ -d "$fresh_home/.config/anthropic" ]
     [ -d "$fresh_home/.config/opencode" ]
     [ -d "$fresh_home/.local/share/direnv" ]
     [ -d "$fresh_home/.local/share/opencode" ]
+    [ ! -e "$fresh_home/.local/share/omp" ]
     [ -d "$fresh_home/.local/state/opencode" ]
+    [ ! -e "$fresh_home/.local/state/omp" ]
     [ -d "$fresh_home/.cache/direnv" ]
     [ "$(cat "$fresh_home/.claude.json")" = "{}" ]
 
@@ -306,7 +345,10 @@ assert_arg_sequence() {
     assert_arg "$fresh_home/.agents/plugins"
     assert_arg "$fresh_home/.codex"
     assert_arg "$fresh_home/.claude.json"
+    assert_arg "$fresh_home/.hermes"
+    assert_arg "$fresh_home/.omp"
     assert_arg "$fresh_home/.ori"
+    assert_arg "$fresh_home/.pi"
     assert_arg "$fresh_home/.cache/copilot"
     assert_arg "$fresh_home/.cache/opencode"
     assert_arg "$fresh_home/.config/anthropic"

@@ -96,6 +96,24 @@ run_aibox() {
     [ "$(cat "$TEST_HOME/.local/state/opencode/file")" = "state" ]
 }
 
+@test "Hermes, OMP, and Pi state writes persist" {
+    run_aibox bash -lc 'echo hermes > "$HOME/.hermes/file"; echo omp > "$HOME/.omp/file"; echo pi > "$HOME/.pi/file"'
+    [ "$status" -eq 0 ]
+    [ "$(cat "$TEST_HOME/.hermes/file")" = "hermes" ]
+    [ "$(cat "$TEST_HOME/.omp/file")" = "omp" ]
+    [ "$(cat "$TEST_HOME/.pi/file")" = "pi" ]
+}
+
+@test "existing OMP XDG state writes persist" {
+    mkdir -p "$TEST_HOME/.cache/omp" "$TEST_HOME/.local/share/omp" "$TEST_HOME/.local/state/omp"
+
+    run_aibox bash -lc 'echo cache > "$HOME/.cache/omp/file"; echo data > "$HOME/.local/share/omp/file"; echo state > "$HOME/.local/state/omp/file"'
+    [ "$status" -eq 0 ]
+    [ "$(cat "$TEST_HOME/.cache/omp/file")" = "cache" ]
+    [ "$(cat "$TEST_HOME/.local/share/omp/file")" = "data" ]
+    [ "$(cat "$TEST_HOME/.local/state/omp/file")" = "state" ]
+}
+
 @test "old agent config paths stay private" {
     run_aibox bash -lc 'mkdir -p "$HOME/.config/claude" "$HOME/.config/claude-code" "$HOME/.config/github-copilot"; touch "$HOME/.config/claude/file" "$HOME/.config/claude-code/file" "$HOME/.config/github-copilot/file"'
     [ "$status" -eq 0 ]
@@ -129,8 +147,10 @@ run_aibox() {
         ANTHROPIC_API_KEY=anthropic-key \
         ANTHROPIC_PROFILE=work \
         COPILOT_GITHUB_TOKEN=copilot-token \
+        HERMES_PROFILE=work \
+        OMP_PROFILE=work \
         bash -c \
-        'cd "$1" && HOME="$2" SHELL=/bin/sh "$3" -- bash -lc '\''test "$OPENAI_API_KEY" = openai-key && test "$ANTHROPIC_API_KEY" = anthropic-key && test "$ANTHROPIC_PROFILE" = work && test "$COPILOT_GITHUB_TOKEN" = copilot-token'\''' \
+        'cd "$1" && HOME="$2" SHELL=/bin/sh "$3" -- bash -lc '\''test "$OPENAI_API_KEY" = openai-key && test "$ANTHROPIC_API_KEY" = anthropic-key && test "$ANTHROPIC_PROFILE" = work && test "$COPILOT_GITHUB_TOKEN" = copilot-token && test "$HERMES_PROFILE" = work && test "$OMP_PROFILE" = work'\''' \
         _ "$TEST_PROJECT" "$TEST_HOME" "$AIBOX"
     [ "$status" -eq 0 ]
 }
@@ -153,9 +173,15 @@ run_aibox() {
         ANTHROPIC_CONFIG_DIR=/host/anthropic \
         COPILOT_HOME=/host/copilot \
         COPILOT_CACHE_HOME=/host/copilot-cache \
+        HERMES_HOME=/host/hermes \
+        HERMES_MANAGED_DIR=/host/hermes-managed \
+        PI_CONFIG_DIR=foreign-omp \
+        PI_CODING_AGENT_DIR=/host/pi-agent \
+        PI_CODING_AGENT_SESSION_DIR=/host/pi-session \
+        PI_SERVER_DIR=/host/pi-server \
         OPENCODE_CONFIG_DIR=/host/opencode \
         bash -c \
-        'cd "$1" && HOME="$2" SHELL=/bin/sh "$3" -- bash -lc '\''test -z "${CODEX_HOME+x}" && test -z "${CODEX_SQLITE_HOME+x}" && test -z "${CLAUDE_CONFIG_DIR+x}" && test -z "${ANTHROPIC_CONFIG_DIR+x}" && test -z "${COPILOT_HOME+x}" && test -z "${COPILOT_CACHE_HOME+x}" && test -z "${OPENCODE_CONFIG_DIR+x}"'\''' \
+        'cd "$1" && HOME="$2" SHELL=/bin/sh "$3" -- bash -lc '\''test -z "${CODEX_HOME+x}" && test -z "${CODEX_SQLITE_HOME+x}" && test -z "${CLAUDE_CONFIG_DIR+x}" && test -z "${ANTHROPIC_CONFIG_DIR+x}" && test -z "${COPILOT_HOME+x}" && test -z "${COPILOT_CACHE_HOME+x}" && test -z "${HERMES_HOME+x}" && test -z "${HERMES_MANAGED_DIR+x}" && test -z "${PI_CONFIG_DIR+x}" && test -z "${PI_CODING_AGENT_DIR+x}" && test -z "${PI_CODING_AGENT_SESSION_DIR+x}" && test -z "${PI_SERVER_DIR+x}" && test -z "${OPENCODE_CONFIG_DIR+x}"'\''' \
         _ "$TEST_PROJECT" "$TEST_HOME" "$AIBOX"
     [ "$status" -eq 0 ]
 }
