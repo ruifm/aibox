@@ -68,15 +68,21 @@ run_aibox() {
     [ "$(cat "$TEST_HOME/.copilot/session-state/session-file")" = "state" ]
 }
 
+@test "ori global state writes persist" {
+    run_aibox bash -lc 'echo state > "$HOME/.ori/state-file"'
+    [ "$status" -eq 0 ]
+    [ "$(cat "$TEST_HOME/.ori/state-file")" = "state" ]
+}
+
 @test "fresh claude json is writable and persists" {
     run_aibox bash -lc 'test "$(cat "$HOME/.claude.json")" = "{}" && printf "%s\n" "{\"ok\":true}" >"$HOME/.claude.json"'
     [ "$status" -eq 0 ]
     [ "$(cat "$TEST_HOME/.claude.json")" = '{"ok":true}' ]
 }
 
-@test "ordinary environment variables pass through" {
-    run env AIBOX_SENTINEL=visible bash -c \
-        'cd "$1" && HOME="$2" SHELL=/bin/sh "$3" -- bash -lc '\''test "$AIBOX_SENTINEL" = visible'\''' \
+@test "ordinary environment variables and the OpenRouter key pass through" {
+    run env AIBOX_SENTINEL=visible OPENROUTER_API_KEY=test-key bash -c \
+        'cd "$1" && HOME="$2" SHELL=/bin/sh "$3" -- bash -lc '\''test "$AIBOX_SENTINEL" = visible && test "$OPENROUTER_API_KEY" = test-key'\''' \
         _ "$TEST_PROJECT" "$TEST_HOME" "$AIBOX"
     [ "$status" -eq 0 ]
 }

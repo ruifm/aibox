@@ -17,6 +17,7 @@ setup() {
         "$TEST_HOME/.codex" \
         "$TEST_HOME/.claude" \
         "$TEST_HOME/.copilot" \
+        "$TEST_HOME/.ori" \
         "$TEST_HOME/.config/claude" \
         "$TEST_HOME/.config/claude-code" \
         "$TEST_HOME/.config/github-copilot" \
@@ -169,13 +170,14 @@ refute_arg() {
     fi
 }
 
-@test "mounts only agent state, not Git or GitHub CLI config" {
+@test "mounts supported agent state, not Git or GitHub CLI config" {
     run_aibox true
     [ "$status" -eq 0 ]
 
     assert_arg "$TEST_HOME/.codex"
     assert_arg "$TEST_HOME/.claude"
     assert_arg "$TEST_HOME/.copilot"
+    assert_arg "$TEST_HOME/.ori"
     assert_arg "$TEST_HOME/.config/github-copilot"
     assert_arg "COPILOT_HOME"
 
@@ -206,6 +208,7 @@ refute_arg() {
     [ -d "$fresh_home/.codex" ]
     [ -d "$fresh_home/.claude" ]
     [ -d "$fresh_home/.copilot" ]
+    [ -d "$fresh_home/.ori" ]
     [ -d "$fresh_home/.config/claude" ]
     [ -d "$fresh_home/.config/claude-code" ]
     [ -d "$fresh_home/.config/github-copilot" ]
@@ -215,6 +218,7 @@ refute_arg() {
 
     assert_arg "$fresh_home/.codex"
     assert_arg "$fresh_home/.claude.json"
+    assert_arg "$fresh_home/.ori"
 }
 
 @test "preserves existing claude json content" {

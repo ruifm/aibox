@@ -29,6 +29,7 @@ usage() {
         "  aibox codex" \
         "  aibox claude" \
         "  aibox copilot" \
+        "  aibox ori codex" \
         "  aibox -- bash"
 }
 
@@ -220,6 +221,7 @@ prepare_host_state() {
         "$host_home/.codex" \
         "$host_home/.claude" \
         "$host_home/.copilot" \
+        "$host_home/.ori" \
         "$host_home/.config/claude" \
         "$host_home/.config/claude-code" \
         "$host_home/.config/github-copilot" \
@@ -284,6 +286,7 @@ build_bwrap_args() {
         "$host_home/.claude" \
         "$host_home/.claude.json" \
         "$host_home/.copilot" \
+        "$host_home/.ori" \
         "$host_home/.config/claude" \
         "$host_home/.config/claude-code" \
         "$host_home/.config/github-copilot"; do

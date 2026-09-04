@@ -15,12 +15,14 @@ on exit, no per-session agent binary drift, and no runtime configuration file.
 aibox codex
 aibox claude
 aibox copilot
+aibox ori codex
 aibox -- bash
 ```
 
 Supported agent state/config policy is maintained for Codex, Claude Code, and
-GitHub Copilot CLI. Other commands can be useful for debugging, but they are
-best-effort and do not get dedicated persistent state/config mounts.
+GitHub Copilot CLI. OpenRouter support uses Ori. Other commands can be useful
+for debugging, but they are best-effort and do not get dedicated persistent
+state/config mounts.
 
 ## Install
 
@@ -79,6 +81,25 @@ cd my-project
 aibox codex
 ```
 
+## OpenRouter
+
+Install [Ori](https://openrouter.ai/ori/harness) and the agent in a project
+devShell or Nix profile. Sign in without trying to start a host browser from
+the sandbox, then run the agent through Ori:
+
+```sh
+aibox ori login --no-browser
+aibox ori codex
+```
+
+You can also set `OPENROUTER_API_KEY` before you start `aibox`. The sandbox
+keeps inherited environment variables.
+
+Ori keeps shared login and settings in `~/.ori`, which `aibox` mounts
+read/write. Ori also writes logs and session transcripts to `.ori/` in the
+project. Add `.ori/` to the project `.gitignore` because these files can contain
+repository content and prompts.
+
 ## Agent Prompt
 
 Before starting a session, paste the generated prompt into the agent. Inside an
@@ -99,9 +120,9 @@ aibox -p
 - [direnv](https://direnv.net/) and Nix devShells for the recommended workflow.
 
 For an agent session, install the supported agent command you intend to run
-(`codex`, `claude`, or `copilot`) somewhere the sandbox can see it: the project
-Nix devShell, a Nix profile, or the host system paths mounted read-only at
-`/usr` and `/bin`.
+(`codex`, `claude`, `copilot`, or `ori`) somewhere the sandbox can see it: the
+project Nix devShell, a Nix profile, or the host system paths mounted read-only
+at `/usr` and `/bin`. Ori also needs the target agent command.
 
 ## How It Works
 
@@ -134,6 +155,7 @@ Persistent agent state/config mounts:
 - `~/.claude`
 - `~/.claude.json`
 - `~/.copilot`
+- `~/.ori`
 - `~/.config/claude`
 - `~/.config/claude-code`
 - `~/.config/github-copilot`
