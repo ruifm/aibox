@@ -14,10 +14,14 @@ setup() {
     mkdir -p \
         "$TEST_PROJECT" \
         "$FAKE_BIN" \
+        "$TEST_HOME/.agents/skills" \
+        "$TEST_HOME/.agents/plugins" \
         "$TEST_HOME/.codex" \
         "$TEST_HOME/.claude" \
         "$TEST_HOME/.copilot" \
         "$TEST_HOME/.ori" \
+        "$TEST_HOME/.cache/copilot" \
+        "$TEST_HOME/.config/anthropic" \
         "$TEST_HOME/.config/claude" \
         "$TEST_HOME/.config/claude-code" \
         "$TEST_HOME/.config/github-copilot" \
@@ -66,6 +70,23 @@ refute_arg() {
     ! grep -Fxq -- "$1" "$AIBOX_FAKE_BWRAP_LOG"
 }
 
+assert_arg_sequence() {
+    local -a expected=("$@")
+    local -a actual
+    local start offset
+
+    mapfile -t actual <"$AIBOX_FAKE_BWRAP_LOG"
+    for ((start = 0; start + ${#expected[@]} <= ${#actual[@]}; start++)); do
+        for ((offset = 0; offset < ${#expected[@]}; offset++)); do
+            [[ "${actual[start + offset]}" == "${expected[offset]}" ]] || break
+        done
+        ((offset == ${#expected[@]})) && return 0
+    done
+
+    printf 'missing argument sequence: %s\n' "${expected[*]}" >&2
+    return 1
+}
+
 @test "--version prints version" {
     mkdir -p "${BATS_TEST_TMPDIR}/empty-path"
 
@@ -81,7 +102,7 @@ refute_arg() {
     [ "$status" -eq 0 ]
     [[ "$output" == *"Usage:"* ]]
     [[ "$output" == *"aibox -p|--dump-prompt"* ]]
-    [[ "$output" == *"Run from a project directory"* ]]
+    [[ "$output" == *"Run from the repository root"* ]]
 }
 
 @test "--dump-prompt does not require bwrap" {
@@ -93,6 +114,8 @@ refute_arg() {
     [[ "$output" == *"https://github.com/ruifm/aibox"* ]]
     [[ "$output" == *"Nix devShell"* ]]
     [[ "$output" == *"run direnv allow once before adding tools"* ]]
+    [[ "$output" == *"Project files above it are not visible"* ]]
+    [[ "$output" == *"Custom agent state path environment variables are removed"* ]]
 }
 
 @test "-p dumps prompt" {
@@ -141,10 +164,10 @@ refute_arg() {
     assert_arg "$TEST_PROJECT"
 }
 
-@test "refusing HOME as workspace suggests project directory" {
+@test "refusing HOME as workspace suggests repository root" {
     run bash -c 'cd "$1" && HOME="$1" SHELL=/bin/sh bash "$2" -- true' _ "$TEST_PROJECT" "$AIBOX"
     [ "$status" -ne 0 ]
-    [[ "$output" == *"refusing to bind HOME as the writable workspace; cd into a project directory first"* ]]
+    [[ "$output" == *"refusing to bind HOME as the writable workspace; cd into a repository root first"* ]]
 }
 
 @test "keeps root read-only and host network shared" {
@@ -174,18 +197,59 @@ refute_arg() {
     run_aibox true
     [ "$status" -eq 0 ]
 
+    assert_arg "$TEST_HOME/.agents/skills"
+    assert_arg "$TEST_HOME/.agents/plugins"
     assert_arg "$TEST_HOME/.codex"
     assert_arg "$TEST_HOME/.claude"
     assert_arg "$TEST_HOME/.copilot"
     assert_arg "$TEST_HOME/.ori"
-    assert_arg "$TEST_HOME/.config/github-copilot"
-    assert_arg "COPILOT_HOME"
+    assert_arg "$TEST_HOME/.cache/copilot"
+    assert_arg "$TEST_HOME/.config/anthropic"
 
+    refute_arg "$TEST_HOME/.config/claude"
+    refute_arg "$TEST_HOME/.config/claude-code"
+    refute_arg "$TEST_HOME/.config/github-copilot"
     refute_arg "$TEST_HOME/.config/gh"
     refute_arg "$TEST_HOME/.gitconfig"
     refute_arg "$TEST_HOME/.config/git"
     refute_arg "$TEST_HOME/AGENTS.md"
     refute_arg "$TEST_HOME/CLAUDE.md"
+}
+
+@test "mounts system agent config read-only when present" {
+    run_aibox true
+    [ "$status" -eq 0 ]
+
+    assert_arg_sequence --ro-bind-try /etc/codex /etc/codex
+    assert_arg_sequence --ro-bind-try /etc/claude-code /etc/claude-code
+    assert_arg_sequence --ro-bind-try /etc/github-copilot /etc/github-copilot
+}
+
+@test "uses fixed default agent state paths" {
+    run env \
+        CODEX_HOME=/host/codex \
+        CODEX_SQLITE_HOME=/host/codex-sqlite \
+        CLAUDE_CONFIG_DIR=/host/claude \
+        ANTHROPIC_CONFIG_DIR=/host/anthropic \
+        COPILOT_HOME=/host/copilot \
+        COPILOT_CACHE_HOME=/host/copilot-cache \
+        bash -c 'cd "$1" && HOME="$2" SHELL=/bin/sh bash "$3" -- true' \
+        _ "$TEST_PROJECT" "$TEST_HOME" "$AIBOX"
+    [ "$status" -eq 0 ]
+
+    assert_arg_sequence --unsetenv CODEX_HOME
+    assert_arg_sequence --unsetenv CODEX_SQLITE_HOME
+    assert_arg_sequence --unsetenv CLAUDE_CONFIG_DIR
+    assert_arg_sequence --unsetenv ANTHROPIC_CONFIG_DIR
+    assert_arg_sequence --unsetenv COPILOT_HOME
+    assert_arg_sequence --unsetenv COPILOT_CACHE_HOME
+
+    refute_arg /host/codex
+    refute_arg /host/codex-sqlite
+    refute_arg /host/claude
+    refute_arg /host/anthropic
+    refute_arg /host/copilot
+    refute_arg /host/copilot-cache
 }
 
 @test "mounts aibox prompt command inside sandbox path" {
@@ -205,20 +269,25 @@ refute_arg() {
     run_aibox_with_home "$fresh_home" true
     [ "$status" -eq 0 ]
 
+    [ -d "$fresh_home/.agents/skills" ]
+    [ -d "$fresh_home/.agents/plugins" ]
     [ -d "$fresh_home/.codex" ]
     [ -d "$fresh_home/.claude" ]
     [ -d "$fresh_home/.copilot" ]
     [ -d "$fresh_home/.ori" ]
-    [ -d "$fresh_home/.config/claude" ]
-    [ -d "$fresh_home/.config/claude-code" ]
-    [ -d "$fresh_home/.config/github-copilot" ]
+    [ -d "$fresh_home/.cache/copilot" ]
+    [ -d "$fresh_home/.config/anthropic" ]
     [ -d "$fresh_home/.local/share/direnv" ]
     [ -d "$fresh_home/.cache/direnv" ]
     [ "$(cat "$fresh_home/.claude.json")" = "{}" ]
 
+    assert_arg "$fresh_home/.agents/skills"
+    assert_arg "$fresh_home/.agents/plugins"
     assert_arg "$fresh_home/.codex"
     assert_arg "$fresh_home/.claude.json"
     assert_arg "$fresh_home/.ori"
+    assert_arg "$fresh_home/.cache/copilot"
+    assert_arg "$fresh_home/.config/anthropic"
 }
 
 @test "preserves existing claude json content" {

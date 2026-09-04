@@ -22,7 +22,7 @@ usage() {
         "  - selected agent/Nix/direnv state is mounted back in" \
         "  - inherited environment variables remain visible inside the sandbox" \
         "" \
-        "Run from a project directory. If COMMAND is omitted, \$SHELL is used." \
+        "Run from the repository root. If COMMAND is omitted, \$SHELL is used." \
         "Inside the sandbox, run 'aibox -p' to show agent guidance." \
         "" \
         "Examples:" \
@@ -39,8 +39,11 @@ dump_prompt() {
         "aibox public repo: https://github.com/ruifm/aibox" \
         "" \
         "- Treat the current working directory as the project workspace and the only intended writable project tree." \
+        "- aibox mounts only the directory from which it starts. Project files above it are not visible. Start aibox from the repository root." \
         "- Network access is available." \
         "- Real agent state may be mounted, but broad host home/config state is not available." \
+        "- Custom agent state path environment variables are removed. Use the default Codex, Claude Code, and Copilot CLI paths." \
+        "- D-Bus and host keyrings are not available. Use agent sign-in files or inherited token variables." \
         "- Do not install tools globally with apt, brew, npm -g, pipx, cargo install, or similar unless explicitly asked." \
         "- When a tool is missing, add it declaratively to the project's Nix devShell, then run direnv reload or nix develop as appropriate." \
         "- If the project has no .envrc and no Nix devShell file, bootstrap one with a minimal flake.nix devShell and an .envrc containing 'use flake'; run direnv allow once before adding tools." \
@@ -105,6 +108,14 @@ add_ro_bind() {
     bwrap_args+=(--ro-bind "$src" "$dest")
 }
 
+add_ro_bind_try() {
+    local src=$1
+    local dest=${2:-$1}
+    [[ "$dest" == /* ]] || die "bind destination is not absolute: $dest"
+    add_parent_dir "$dest"
+    bwrap_args+=(--ro-bind-try "$src" "$dest")
+}
+
 add_symlink() {
     local target=$1
     local dest=$2
@@ -167,11 +178,11 @@ init_paths() {
     [[ "$host_home" == /* ]] || die "HOME must resolve to an absolute path"
 
     if [[ "$cwd_dest" == / ]]; then
-        die "refusing to bind / as the writable workspace; cd into a project directory first"
+        die "refusing to bind / as the writable workspace; cd into a repository root first"
     fi
 
     if [[ "$cwd_dest" == "$host_home" ]]; then
-        die "refusing to bind HOME as the writable workspace; cd into a project directory first"
+        die "refusing to bind HOME as the writable workspace; cd into a repository root first"
     fi
 }
 
@@ -218,13 +229,14 @@ prepare_host_state() {
 
     local path
     for path in \
+        "$host_home/.agents/skills" \
+        "$host_home/.agents/plugins" \
         "$host_home/.codex" \
         "$host_home/.claude" \
         "$host_home/.copilot" \
         "$host_home/.ori" \
-        "$host_home/.config/claude" \
-        "$host_home/.config/claude-code" \
-        "$host_home/.config/github-copilot" \
+        "$host_home/.cache/copilot" \
+        "$host_home/.config/anthropic" \
         "$host_home/.local/share/direnv" \
         "$host_home/.cache/direnv"; do
         ensure_host_dir "$path"
@@ -282,14 +294,15 @@ build_bwrap_args() {
 
     local path
     for path in \
+        "$host_home/.agents/skills" \
+        "$host_home/.agents/plugins" \
         "$host_home/.codex" \
         "$host_home/.claude" \
         "$host_home/.claude.json" \
         "$host_home/.copilot" \
         "$host_home/.ori" \
-        "$host_home/.config/claude" \
-        "$host_home/.config/claude-code" \
-        "$host_home/.config/github-copilot"; do
+        "$host_home/.cache/copilot" \
+        "$host_home/.config/anthropic"; do
         add_bind "$path" "$path"
     done
 
@@ -312,6 +325,13 @@ build_bwrap_args() {
         add_ro_bind "$path" "$path"
     done
 
+    for path in \
+        /etc/codex \
+        /etc/claude-code \
+        /etc/github-copilot; do
+        add_ro_bind_try "$path" "$path"
+    done
+
     env_args=(
         --setenv HOME "$host_home"
         --setenv XDG_CONFIG_HOME "$host_home/.config"
@@ -327,7 +347,12 @@ build_bwrap_args() {
         --unsetenv XDG_RUNTIME_DIR
         --unsetenv DOCKER_HOST
         --unsetenv KUBECONFIG
+        --unsetenv CODEX_HOME
+        --unsetenv CODEX_SQLITE_HOME
+        --unsetenv CLAUDE_CONFIG_DIR
+        --unsetenv ANTHROPIC_CONFIG_DIR
         --unsetenv COPILOT_HOME
+        --unsetenv COPILOT_CACHE_HOME
         --unsetenv NIX_REMOTE
     )
 

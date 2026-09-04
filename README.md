@@ -74,12 +74,16 @@ use flake
 If the project has no `.envrc` and no Nix devShell yet, start by adding a
 minimal `flake.nix` devShell plus the `.envrc` above, then run `direnv allow`.
 
-Then launch the agent from the project directory:
+Then launch the agent from the repository root:
 
 ```sh
 cd my-project
 aibox codex
 ```
+
+`aibox` mounts the current directory, not its parent directories. If you start
+it from a directory below the repository root, parent files such as `.git`,
+`AGENTS.md`, `CLAUDE.md`, and agent settings are not visible.
 
 ## OpenRouter
 
@@ -151,23 +155,50 @@ an arbitrary host-path mount interface.
 
 Persistent agent state/config mounts:
 
+- `~/.agents/skills`
+- `~/.agents/plugins`
 - `~/.codex`
 - `~/.claude`
 - `~/.claude.json`
+- `~/.config/anthropic`
 - `~/.copilot`
+- `~/.cache/copilot`
 - `~/.ori`
-- `~/.config/claude`
-- `~/.config/claude-code`
-- `~/.config/github-copilot`
 
 These writable state paths are created on the host before launch when missing.
 `~/.claude.json` is initialized as `{}`. If one of the expected directories is
 a file, or `~/.claude.json` is not a file, `aibox` fails before starting the
 sandbox.
 
+`~/.agents/skills` is shared by Codex and Copilot CLI. Codex uses
+`~/.agents/plugins` for personal plugin records. Claude Code can use Anthropic
+CLI profiles and credentials from `~/.config/anthropic`. A selected Anthropic
+API profile can use API billing instead of Claude subscription billing.
+`~/.cache/copilot` is persistent to prevent repeated downloads.
+
+System agent config mounts are read-only and are added only when they exist:
+
+- `/etc/codex`
+- `/etc/claude-code`
+- `/etc/github-copilot`
+
+`aibox` uses the default agent state paths. It removes `CODEX_HOME`,
+`CODEX_SQLITE_HOME`, `CLAUDE_CONFIG_DIR`, `ANTHROPIC_CONFIG_DIR`,
+`COPILOT_HOME`, and `COPILOT_CACHE_HOME` inside the sandbox. It does not use
+environment variables to add mounts. Profile selectors such as
+`ANTHROPIC_PROFILE` still pass through.
+
+Other inherited agent variables also pass through. This includes API tokens,
+model settings, provider settings, and profile selectors. A new variable does
+not need a change in `aibox` unless it contains a file path that must be visible
+inside the sandbox.
+
 `aibox` intentionally does not mount GitHub CLI config, Git config, SSH agent,
 GPG agent, D-Bus, Docker, Kubernetes config, browser profiles, or arbitrary
 extra paths.
+
+Linux keyrings that need D-Bus are not available. Use sign-in data in the
+mounted agent state paths or use inherited token environment variables.
 
 ## Security Model
 

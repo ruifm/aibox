@@ -62,10 +62,37 @@ run_aibox() {
     [ "$(cat "$TEST_HOME/.codex/state-file")" = "state" ]
 }
 
+@test "shared agent skills and plugin state writes persist" {
+    run_aibox bash -lc 'echo skill > "$HOME/.agents/skills/state-file"; echo plugin > "$HOME/.agents/plugins/state-file"'
+    [ "$status" -eq 0 ]
+    [ "$(cat "$TEST_HOME/.agents/skills/state-file")" = "skill" ]
+    [ "$(cat "$TEST_HOME/.agents/plugins/state-file")" = "plugin" ]
+}
+
+@test "Anthropic profile state writes persist" {
+    run_aibox bash -lc 'echo profile > "$HOME/.config/anthropic/state-file"'
+    [ "$status" -eq 0 ]
+    [ "$(cat "$TEST_HOME/.config/anthropic/state-file")" = "profile" ]
+}
+
 @test "copilot state writes persist" {
     run_aibox bash -lc 'mkdir -p "$HOME/.copilot/session-state"; echo state > "$HOME/.copilot/session-state/session-file"'
     [ "$status" -eq 0 ]
     [ "$(cat "$TEST_HOME/.copilot/session-state/session-file")" = "state" ]
+}
+
+@test "copilot cache writes persist" {
+    run_aibox bash -lc 'echo cache > "$HOME/.cache/copilot/cache-file"'
+    [ "$status" -eq 0 ]
+    [ "$(cat "$TEST_HOME/.cache/copilot/cache-file")" = "cache" ]
+}
+
+@test "old agent config paths stay private" {
+    run_aibox bash -lc 'mkdir -p "$HOME/.config/claude" "$HOME/.config/claude-code" "$HOME/.config/github-copilot"; touch "$HOME/.config/claude/file" "$HOME/.config/claude-code/file" "$HOME/.config/github-copilot/file"'
+    [ "$status" -eq 0 ]
+    [ ! -e "$TEST_HOME/.config/claude/file" ]
+    [ ! -e "$TEST_HOME/.config/claude-code/file" ]
+    [ ! -e "$TEST_HOME/.config/github-copilot/file" ]
 }
 
 @test "ori global state writes persist" {
@@ -83,6 +110,32 @@ run_aibox() {
 @test "ordinary environment variables and the OpenRouter key pass through" {
     run env AIBOX_SENTINEL=visible OPENROUTER_API_KEY=test-key bash -c \
         'cd "$1" && HOME="$2" SHELL=/bin/sh "$3" -- bash -lc '\''test "$AIBOX_SENTINEL" = visible && test "$OPENROUTER_API_KEY" = test-key'\''' \
+        _ "$TEST_PROJECT" "$TEST_HOME" "$AIBOX"
+    [ "$status" -eq 0 ]
+}
+
+@test "agent API and profile environment variables pass through" {
+    run env \
+        OPENAI_API_KEY=openai-key \
+        ANTHROPIC_API_KEY=anthropic-key \
+        ANTHROPIC_PROFILE=work \
+        COPILOT_GITHUB_TOKEN=copilot-token \
+        bash -c \
+        'cd "$1" && HOME="$2" SHELL=/bin/sh "$3" -- bash -lc '\''test "$OPENAI_API_KEY" = openai-key && test "$ANTHROPIC_API_KEY" = anthropic-key && test "$ANTHROPIC_PROFILE" = work && test "$COPILOT_GITHUB_TOKEN" = copilot-token'\''' \
+        _ "$TEST_PROJECT" "$TEST_HOME" "$AIBOX"
+    [ "$status" -eq 0 ]
+}
+
+@test "custom agent state roots are removed" {
+    run env \
+        CODEX_HOME=/host/codex \
+        CODEX_SQLITE_HOME=/host/codex-sqlite \
+        CLAUDE_CONFIG_DIR=/host/claude \
+        ANTHROPIC_CONFIG_DIR=/host/anthropic \
+        COPILOT_HOME=/host/copilot \
+        COPILOT_CACHE_HOME=/host/copilot-cache \
+        bash -c \
+        'cd "$1" && HOME="$2" SHELL=/bin/sh "$3" -- bash -lc '\''test -z "${CODEX_HOME+x}" && test -z "${CODEX_SQLITE_HOME+x}" && test -z "${CLAUDE_CONFIG_DIR+x}" && test -z "${ANTHROPIC_CONFIG_DIR+x}" && test -z "${COPILOT_HOME+x}" && test -z "${COPILOT_CACHE_HOME+x}"'\''' \
         _ "$TEST_PROJECT" "$TEST_HOME" "$AIBOX"
     [ "$status" -eq 0 ]
 }

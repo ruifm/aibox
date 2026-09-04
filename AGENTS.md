@@ -12,6 +12,7 @@ The public contract is intentionally small:
 - keep host networking available;
 - expose Nix store and the Nix daemon socket;
 - mount only explicit agent state/config paths from `$HOME`;
+- mount fixed system agent config directories read-only when present;
 - do not mount Git/GitHub config, SSH agent, GPG agent, D-Bus, Docker, or
   Kubernetes state;
 - print the final `bwrap` command to stderr before executing it.
