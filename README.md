@@ -15,14 +15,15 @@ on exit, no per-session agent binary drift, and no runtime configuration file.
 aibox codex
 aibox claude
 aibox copilot
+aibox opencode
 aibox ori codex
 aibox -- bash
 ```
 
-Supported agent state/config policy is maintained for Codex, Claude Code, and
-GitHub Copilot CLI. OpenRouter support uses Ori. Other commands can be useful
-for debugging, but they are best-effort and do not get dedicated persistent
-state/config mounts.
+Supported agent state/config policy is maintained for Codex, Claude Code,
+GitHub Copilot CLI, and [OpenCode](https://opencode.ai/docs/). OpenRouter
+support uses Ori. Other commands can be useful for debugging, but they are
+best-effort and do not get dedicated persistent state/config mounts.
 
 ## Install
 
@@ -124,9 +125,9 @@ aibox -p
 - [direnv](https://direnv.net/) and Nix devShells for the recommended workflow.
 
 For an agent session, install the supported agent command you intend to run
-(`codex`, `claude`, `copilot`, or `ori`) somewhere the sandbox can see it: the
-project Nix devShell, a Nix profile, or the host system paths mounted read-only
-at `/usr` and `/bin`. Ori also needs the target agent command.
+(`codex`, `claude`, `copilot`, `opencode`, or `ori`) somewhere the sandbox can
+see it: the project Nix devShell, a Nix profile, or the host system paths
+mounted read-only at `/usr` and `/bin`. Ori also needs the target agent command.
 
 ## How It Works
 
@@ -142,7 +143,8 @@ at `/usr` and `/bin`. Ori also needs the target agent command.
 - mounts `aibox` itself read-only at `/run/aibox/bin/aibox` and prepends that
   directory to `PATH`;
 - leaves the inherited `PATH` visible, but does not discover or bind-mount
-  arbitrary agent binaries from host-only paths such as `~/.local/bin`;
+  arbitrary agent binaries from host-only paths such as `~/.local/bin` or
+  `~/.opencode/bin`;
 - remounts the synthetic root read-only after setup;
 - prints the final `bwrap` command to stderr before execution.
 
@@ -163,6 +165,10 @@ Persistent agent state/config mounts:
 - `~/.config/anthropic`
 - `~/.copilot`
 - `~/.cache/copilot`
+- `~/.cache/opencode`
+- `~/.config/opencode`
+- `~/.local/share/opencode`
+- `~/.local/state/opencode`
 - `~/.ori`
 
 These writable state paths are created on the host before launch when missing.
@@ -176,17 +182,27 @@ CLI profiles and credentials from `~/.config/anthropic`. A selected Anthropic
 API profile can use API billing instead of Claude subscription billing.
 `~/.cache/copilot` is persistent to prevent repeated downloads.
 
+OpenCode uses `~/.config/opencode` for user settings, instructions, agents,
+commands, skills, and plugins. It uses `~/.local/share/opencode` for login,
+MCP, session, and log data. It uses `~/.local/state/opencode` for state and
+`~/.cache/opencode` for downloaded tools and plugin packages. Project
+`.opencode` files are available through the project mount.
+
 System agent config mounts are read-only and are added only when they exist:
 
 - `/etc/codex`
 - `/etc/claude-code`
 - `/etc/github-copilot`
+- `/etc/opencode`
 
 `aibox` uses the default agent state paths. It removes `CODEX_HOME`,
 `CODEX_SQLITE_HOME`, `CLAUDE_CONFIG_DIR`, `ANTHROPIC_CONFIG_DIR`,
-`COPILOT_HOME`, and `COPILOT_CACHE_HOME` inside the sandbox. It does not use
-environment variables to add mounts. Profile selectors such as
-`ANTHROPIC_PROFILE` still pass through.
+`COPILOT_HOME`, `COPILOT_CACHE_HOME`, and `OPENCODE_CONFIG_DIR` inside the
+sandbox. It does not use environment variables to add mounts. Profile
+selectors such as `ANTHROPIC_PROFILE` still pass through.
+
+`OPENCODE_CONFIG` and `OPENCODE_TUI_CONFIG` also pass through. The file must be
+in the project or another path that the sandbox can read.
 
 Other inherited agent variables also pass through. This includes API tokens,
 model settings, provider settings, and profile selectors. A new variable does

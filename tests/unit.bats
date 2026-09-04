@@ -16,12 +16,15 @@ setup() {
         "$FAKE_BIN" \
         "$TEST_HOME/.agents/skills" \
         "$TEST_HOME/.agents/plugins" \
+        "$TEST_HOME/.opencode/bin" \
         "$TEST_HOME/.codex" \
         "$TEST_HOME/.claude" \
         "$TEST_HOME/.copilot" \
         "$TEST_HOME/.ori" \
         "$TEST_HOME/.cache/copilot" \
+        "$TEST_HOME/.cache/opencode" \
         "$TEST_HOME/.config/anthropic" \
+        "$TEST_HOME/.config/opencode" \
         "$TEST_HOME/.config/claude" \
         "$TEST_HOME/.config/claude-code" \
         "$TEST_HOME/.config/github-copilot" \
@@ -29,6 +32,8 @@ setup() {
         "$TEST_HOME/.config/git" \
         "$TEST_HOME/.config/direnv" \
         "$TEST_HOME/.local/share/direnv" \
+        "$TEST_HOME/.local/share/opencode" \
+        "$TEST_HOME/.local/state/opencode" \
         "$TEST_HOME/.cache/direnv"
 
     touch \
@@ -103,6 +108,7 @@ assert_arg_sequence() {
     [[ "$output" == *"Usage:"* ]]
     [[ "$output" == *"aibox -p|--dump-prompt"* ]]
     [[ "$output" == *"Run from the repository root"* ]]
+    [[ "$output" == *"aibox opencode"* ]]
 }
 
 @test "--dump-prompt does not require bwrap" {
@@ -116,6 +122,7 @@ assert_arg_sequence() {
     [[ "$output" == *"run direnv allow once before adding tools"* ]]
     [[ "$output" == *"Project files above it are not visible"* ]]
     [[ "$output" == *"Custom agent state path environment variables are removed"* ]]
+    [[ "$output" == *"OpenCode paths"* ]]
 }
 
 @test "-p dumps prompt" {
@@ -204,11 +211,17 @@ assert_arg_sequence() {
     assert_arg "$TEST_HOME/.copilot"
     assert_arg "$TEST_HOME/.ori"
     assert_arg "$TEST_HOME/.cache/copilot"
+    assert_arg "$TEST_HOME/.cache/opencode"
     assert_arg "$TEST_HOME/.config/anthropic"
+    assert_arg "$TEST_HOME/.config/opencode"
+    assert_arg "$TEST_HOME/.local/share/opencode"
+    assert_arg "$TEST_HOME/.local/state/opencode"
 
     refute_arg "$TEST_HOME/.config/claude"
     refute_arg "$TEST_HOME/.config/claude-code"
     refute_arg "$TEST_HOME/.config/github-copilot"
+    refute_arg "$TEST_HOME/.opencode"
+    refute_arg "$TEST_HOME/.opencode/bin"
     refute_arg "$TEST_HOME/.config/gh"
     refute_arg "$TEST_HOME/.gitconfig"
     refute_arg "$TEST_HOME/.config/git"
@@ -223,6 +236,7 @@ assert_arg_sequence() {
     assert_arg_sequence --ro-bind-try /etc/codex /etc/codex
     assert_arg_sequence --ro-bind-try /etc/claude-code /etc/claude-code
     assert_arg_sequence --ro-bind-try /etc/github-copilot /etc/github-copilot
+    assert_arg_sequence --ro-bind-try /etc/opencode /etc/opencode
 }
 
 @test "uses fixed default agent state paths" {
@@ -233,6 +247,7 @@ assert_arg_sequence() {
         ANTHROPIC_CONFIG_DIR=/host/anthropic \
         COPILOT_HOME=/host/copilot \
         COPILOT_CACHE_HOME=/host/copilot-cache \
+        OPENCODE_CONFIG_DIR=/host/opencode \
         bash -c 'cd "$1" && HOME="$2" SHELL=/bin/sh bash "$3" -- true' \
         _ "$TEST_PROJECT" "$TEST_HOME" "$AIBOX"
     [ "$status" -eq 0 ]
@@ -243,6 +258,7 @@ assert_arg_sequence() {
     assert_arg_sequence --unsetenv ANTHROPIC_CONFIG_DIR
     assert_arg_sequence --unsetenv COPILOT_HOME
     assert_arg_sequence --unsetenv COPILOT_CACHE_HOME
+    assert_arg_sequence --unsetenv OPENCODE_CONFIG_DIR
 
     refute_arg /host/codex
     refute_arg /host/codex-sqlite
@@ -250,6 +266,7 @@ assert_arg_sequence() {
     refute_arg /host/anthropic
     refute_arg /host/copilot
     refute_arg /host/copilot-cache
+    refute_arg /host/opencode
 }
 
 @test "mounts aibox prompt command inside sandbox path" {
@@ -276,8 +293,12 @@ assert_arg_sequence() {
     [ -d "$fresh_home/.copilot" ]
     [ -d "$fresh_home/.ori" ]
     [ -d "$fresh_home/.cache/copilot" ]
+    [ -d "$fresh_home/.cache/opencode" ]
     [ -d "$fresh_home/.config/anthropic" ]
+    [ -d "$fresh_home/.config/opencode" ]
     [ -d "$fresh_home/.local/share/direnv" ]
+    [ -d "$fresh_home/.local/share/opencode" ]
+    [ -d "$fresh_home/.local/state/opencode" ]
     [ -d "$fresh_home/.cache/direnv" ]
     [ "$(cat "$fresh_home/.claude.json")" = "{}" ]
 
@@ -287,7 +308,11 @@ assert_arg_sequence() {
     assert_arg "$fresh_home/.claude.json"
     assert_arg "$fresh_home/.ori"
     assert_arg "$fresh_home/.cache/copilot"
+    assert_arg "$fresh_home/.cache/opencode"
     assert_arg "$fresh_home/.config/anthropic"
+    assert_arg "$fresh_home/.config/opencode"
+    assert_arg "$fresh_home/.local/share/opencode"
+    assert_arg "$fresh_home/.local/state/opencode"
 }
 
 @test "preserves existing claude json content" {

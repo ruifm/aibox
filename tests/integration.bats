@@ -87,6 +87,15 @@ run_aibox() {
     [ "$(cat "$TEST_HOME/.cache/copilot/cache-file")" = "cache" ]
 }
 
+@test "OpenCode state and config writes persist" {
+    run_aibox bash -lc 'echo cache > "$HOME/.cache/opencode/file"; echo config > "$HOME/.config/opencode/file"; echo data > "$HOME/.local/share/opencode/file"; echo state > "$HOME/.local/state/opencode/file"'
+    [ "$status" -eq 0 ]
+    [ "$(cat "$TEST_HOME/.cache/opencode/file")" = "cache" ]
+    [ "$(cat "$TEST_HOME/.config/opencode/file")" = "config" ]
+    [ "$(cat "$TEST_HOME/.local/share/opencode/file")" = "data" ]
+    [ "$(cat "$TEST_HOME/.local/state/opencode/file")" = "state" ]
+}
+
 @test "old agent config paths stay private" {
     run_aibox bash -lc 'mkdir -p "$HOME/.config/claude" "$HOME/.config/claude-code" "$HOME/.config/github-copilot"; touch "$HOME/.config/claude/file" "$HOME/.config/claude-code/file" "$HOME/.config/github-copilot/file"'
     [ "$status" -eq 0 ]
@@ -126,6 +135,16 @@ run_aibox() {
     [ "$status" -eq 0 ]
 }
 
+@test "OpenCode config file path in the project passes through" {
+    local config="$TEST_PROJECT/opencode-extra.json"
+    printf '{}\n' >"$config"
+
+    run env OPENCODE_CONFIG="$config" bash -c \
+        'cd "$1" && HOME="$2" SHELL=/bin/sh "$3" -- bash -lc '\''test "$OPENCODE_CONFIG" = "$PWD/opencode-extra.json" && test -f "$OPENCODE_CONFIG"'\''' \
+        _ "$TEST_PROJECT" "$TEST_HOME" "$AIBOX"
+    [ "$status" -eq 0 ]
+}
+
 @test "custom agent state roots are removed" {
     run env \
         CODEX_HOME=/host/codex \
@@ -134,8 +153,9 @@ run_aibox() {
         ANTHROPIC_CONFIG_DIR=/host/anthropic \
         COPILOT_HOME=/host/copilot \
         COPILOT_CACHE_HOME=/host/copilot-cache \
+        OPENCODE_CONFIG_DIR=/host/opencode \
         bash -c \
-        'cd "$1" && HOME="$2" SHELL=/bin/sh "$3" -- bash -lc '\''test -z "${CODEX_HOME+x}" && test -z "${CODEX_SQLITE_HOME+x}" && test -z "${CLAUDE_CONFIG_DIR+x}" && test -z "${ANTHROPIC_CONFIG_DIR+x}" && test -z "${COPILOT_HOME+x}" && test -z "${COPILOT_CACHE_HOME+x}"'\''' \
+        'cd "$1" && HOME="$2" SHELL=/bin/sh "$3" -- bash -lc '\''test -z "${CODEX_HOME+x}" && test -z "${CODEX_SQLITE_HOME+x}" && test -z "${CLAUDE_CONFIG_DIR+x}" && test -z "${ANTHROPIC_CONFIG_DIR+x}" && test -z "${COPILOT_HOME+x}" && test -z "${COPILOT_CACHE_HOME+x}" && test -z "${OPENCODE_CONFIG_DIR+x}"'\''' \
         _ "$TEST_PROJECT" "$TEST_HOME" "$AIBOX"
     [ "$status" -eq 0 ]
 }

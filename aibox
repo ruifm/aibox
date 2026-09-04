@@ -29,6 +29,7 @@ usage() {
         "  aibox codex" \
         "  aibox claude" \
         "  aibox copilot" \
+        "  aibox opencode" \
         "  aibox ori codex" \
         "  aibox -- bash"
 }
@@ -42,7 +43,7 @@ dump_prompt() {
         "- aibox mounts only the directory from which it starts. Project files above it are not visible. Start aibox from the repository root." \
         "- Network access is available." \
         "- Real agent state may be mounted, but broad host home/config state is not available." \
-        "- Custom agent state path environment variables are removed. Use the default Codex, Claude Code, and Copilot CLI paths." \
+        "- Custom agent state path environment variables are removed. Use the default Codex, Claude Code, Copilot CLI, and OpenCode paths." \
         "- D-Bus and host keyrings are not available. Use agent sign-in files or inherited token variables." \
         "- Do not install tools globally with apt, brew, npm -g, pipx, cargo install, or similar unless explicitly asked." \
         "- When a tool is missing, add it declaratively to the project's Nix devShell, then run direnv reload or nix develop as appropriate." \
@@ -236,8 +237,12 @@ prepare_host_state() {
         "$host_home/.copilot" \
         "$host_home/.ori" \
         "$host_home/.cache/copilot" \
+        "$host_home/.cache/opencode" \
         "$host_home/.config/anthropic" \
+        "$host_home/.config/opencode" \
         "$host_home/.local/share/direnv" \
+        "$host_home/.local/share/opencode" \
+        "$host_home/.local/state/opencode" \
         "$host_home/.cache/direnv"; do
         ensure_host_dir "$path"
     done
@@ -302,7 +307,11 @@ build_bwrap_args() {
         "$host_home/.copilot" \
         "$host_home/.ori" \
         "$host_home/.cache/copilot" \
-        "$host_home/.config/anthropic"; do
+        "$host_home/.cache/opencode" \
+        "$host_home/.config/anthropic" \
+        "$host_home/.config/opencode" \
+        "$host_home/.local/share/opencode" \
+        "$host_home/.local/state/opencode"; do
         add_bind "$path" "$path"
     done
 
@@ -328,7 +337,8 @@ build_bwrap_args() {
     for path in \
         /etc/codex \
         /etc/claude-code \
-        /etc/github-copilot; do
+        /etc/github-copilot \
+        /etc/opencode; do
         add_ro_bind_try "$path" "$path"
     done
 
@@ -353,6 +363,7 @@ build_bwrap_args() {
         --unsetenv ANTHROPIC_CONFIG_DIR
         --unsetenv COPILOT_HOME
         --unsetenv COPILOT_CACHE_HOME
+        --unsetenv OPENCODE_CONFIG_DIR
         --unsetenv NIX_REMOTE
     )
 
