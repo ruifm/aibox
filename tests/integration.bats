@@ -20,6 +20,10 @@ setup() {
 }
 
 teardown() {
+    if [[ -n ${runtime_pid:-} ]]; then
+        kill "$runtime_pid" 2>/dev/null || true
+        wait "$runtime_pid" 2>/dev/null || true
+    fi
     rm -rf "$TEST_ROOT"
 }
 
@@ -60,6 +64,31 @@ run_aibox() {
     export SSL_CERT_FILE='first bundle' NIX_SSL_CERT_FILE="$TEST_PROJECT/second"
     run_aibox bash -c 'test "$1" = '\''a b; $(false)'\'' && test "$2" = "" && test "$SSL_CERT_FILE" = "first bundle" && exit 42' _ 'a b; $(false)' ''
     [ "$status" -eq 42 ]
+}
+
+@test "runtime storage is private tmpfs with mode 0700 and does not survive restart" {
+    export XDG_RUNTIME_DIR="$TEST_HOME/host-runtime"
+    mkdir -p "$XDG_RUNTIME_DIR"
+    touch "$XDG_RUNTIME_DIR/host-file"
+    run_aibox bash -c 'test "$XDG_RUNTIME_DIR" = /run/aibox/runtime && test "$(stat -c %a "$XDG_RUNTIME_DIR")" = 700 && test "$(stat -c %u "$XDG_RUNTIME_DIR")" = "$(id -u)" && test "$(stat -f -c %T "$XDG_RUNTIME_DIR")" = tmpfs && test ! -e "$XDG_RUNTIME_DIR/host-file" && touch "$XDG_RUNTIME_DIR/private-file"'
+    [ "$status" -eq 0 ]
+    run_aibox test ! -e /run/aibox/runtime/private-file
+    [ "$status" -eq 0 ]
+    [ ! -e "$TEST_HOME/host-runtime/private-file" ]
+}
+
+@test "concurrent sandboxes do not share runtime storage" {
+    bash -c 'cd "$1" && HOME="$2" exec "$3" -- bash -c '\''set -eu; echo private > "$XDG_RUNTIME_DIR/token"; touch ready; while [[ ! -e finish ]]; do sleep 0.1; done'\''' _ "$TEST_PROJECT" "$TEST_HOME" "$AIBOX" >"$TEST_ROOT/runtime.log" 2>&1 &
+    runtime_pid=$!
+    for ((attempt = 0; attempt < 100; attempt++)); do
+        [[ -e "$TEST_PROJECT/ready" ]] && break
+        sleep 0.1
+    done
+    [ -e "$TEST_PROJECT/ready" ]
+    run_aibox bash -c 'test ! -e "$XDG_RUNTIME_DIR/token" && touch finish'
+    [ "$status" -eq 0 ]
+    wait "$runtime_pid"
+    unset runtime_pid
 }
 
 @test "parent directory write is denied" {

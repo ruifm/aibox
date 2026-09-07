@@ -6,6 +6,7 @@ readonly VERSION="0.1.0"
 readonly PROGRAM_NAME="aibox"
 readonly SANDBOX_AIBOX_DIR="/run/aibox/bin"
 readonly SANDBOX_AIBOX_PATH="${SANDBOX_AIBOX_DIR}/aibox"
+readonly SANDBOX_RUNTIME_DIR="/run/aibox/runtime"
 
 usage() {
     printf '%s\n' \
@@ -56,6 +57,7 @@ dump_prompt() {
         "- If the project has no .envrc and no Nix devShell file, bootstrap one with a minimal flake.nix devShell and an .envrc containing 'use flake'; run direnv allow once before adding tools." \
         "- Keep tooling changes in project files such as flake.nix, shell.nix, devshell.nix, or the existing local equivalent." \
         "- Generic \$HOME cache/config/local writes are sandbox-private unless a path is explicitly mounted by aibox." \
+        "- XDG_RUNTIME_DIR is private temporary storage for this sandbox. Use it for sockets and active runtime state; its contents do not survive a restart." \
         "- You can run 'aibox -p' or 'aibox --dump-prompt' again to show these instructions."
 }
 
@@ -93,6 +95,9 @@ add_tmpfs() {
     local dest=$1
     [[ "$dest" == /* ]] || die "tmpfs destination is not absolute: $dest"
     add_parent_dir "$dest"
+    if (($# > 1)); then
+        bwrap_args+=(--perms "$2")
+    fi
     bwrap_args+=(--tmpfs "$dest")
     made_dirs[$dest]=1
 }
@@ -312,6 +317,7 @@ build_bwrap_args() {
     add_tmpfs /tmp
     add_dir /var
     add_tmpfs /var/tmp
+    add_tmpfs "$SANDBOX_RUNTIME_DIR" 0700
     add_dir "$host_home"
     add_tmpfs "$host_home/.cache"
     add_tmpfs "$host_home/.config"
@@ -412,13 +418,13 @@ build_bwrap_args() {
         --setenv XDG_CACHE_HOME "$host_home/.cache"
         --setenv XDG_DATA_HOME "$host_home/.local/share"
         --setenv XDG_STATE_HOME "$host_home/.local/state"
+        --setenv XDG_RUNTIME_DIR "$SANDBOX_RUNTIME_DIR"
         --setenv PATH "${SANDBOX_AIBOX_DIR}:${PATH:-/usr/local/bin:/usr/bin:/bin}"
         --setenv TMPDIR /tmp
         --unsetenv SSH_AUTH_SOCK
         --unsetenv GPG_AGENT_INFO
         --unsetenv GNUPGHOME
         --unsetenv DBUS_SESSION_BUS_ADDRESS
-        --unsetenv XDG_RUNTIME_DIR
         --unsetenv DOCKER_HOST
         --unsetenv KUBECONFIG
         --unsetenv CODEX_HOME

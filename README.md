@@ -289,6 +289,67 @@ CLI arguments.
 Nix builds are performed by the host Nix daemon, outside Bubblewrap. Use host
 Nix sandboxing if build isolation matters.
 
+## State Lifetime
+
+| Paths | Access and lifetime |
+| --- | --- |
+| Workspace, including `.direnv` | Read/write; persists on the host |
+| Agent state/config paths listed above | Read/write; persists on the host |
+| `~/.local/share/direnv`, `~/.cache/direnv` | Read/write; persists on the host |
+| Other files below `~/.cache`, `~/.config`, `~/.local` | Private temporary storage, except listed read-only mounts |
+| `/tmp`, `/var/tmp`, `/run/aibox/runtime` | Private temporary storage; each new sandbox starts empty |
+| Home skeleton outside writable mounts | Read-only; not the host home contents |
+| Nix store, system configuration, Nix profiles, direnv configuration | Read-only host mounts |
+
+`XDG_RUNTIME_DIR` is `/run/aibox/runtime`, a separate tmpfs mount owned by the
+invoking user with mode 0700. The inherited runtime path is replaced. Concurrent
+sandboxes do not share it. Use it for sockets and active GPG state that must not
+survive a restart. Storage is released when the sandbox processes end.
+
+`aibox` removes `SSH_AUTH_SOCK`, `GPG_AGENT_INFO`, `GNUPGHOME`,
+`DBUS_SESSION_BUS_ADDRESS`, `DOCKER_HOST`, and `KUBECONFIG`, plus the agent path
+variables listed above. It replaces `HOME`, the XDG base directories, and
+`TMPDIR`, and selects `NIX_REMOTE=daemon` when the daemon socket exists.
+Other variables remain visible, including credentials. No host SSH or GPG agent
+is forwarded automatically.
+
+Persistent agent directories can contain credentials, live databases, locks,
+and sockets. Do not synchronize complete live state directories without checking
+the application's backup requirements. Exclude sockets, locks, temporary runtime
+files, and credential bundles from ordinary source synchronization.
+
+### Explicit Credentials
+
+Use a dedicated credential bundle inside the workspace when a command needs it.
+Create it outside the sandbox, restrict its directory to mode 0700 and private
+files to mode 0600, and exclude it from Git and synchronization. Do not put secret
+keys in Nix expressions or the Nix store.
+
+For SSH, select the dedicated key and known-hosts file explicitly:
+
+```sh
+aibox -- ssh -F /dev/null -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+  -o UserKnownHostsFile="$PWD/.credentials/known_hosts" \
+  -i "$PWD/.credentials/id_ed25519" operator@server.example
+```
+
+For GPG and a dedicated password store, set paths after sandbox entry:
+
+```sh
+aibox -- bash -c '
+  export GNUPGHOME="$XDG_RUNTIME_DIR/gnupg"
+  export PASSWORD_STORE_DIR="$PWD/.credentials/password-store"
+  install -d -m 0700 "$GNUPGHOME"
+  gpg --batch --import "$PWD/.credentials/gpg-secret.asc" || exit
+  exec pass show service/account
+'
+```
+
+Install these commands in the project devShell. An authorized self-SSH key can
+permit commands on the host through the shared network, outside the filesystem
+boundary. Credential access is an explicit operator choice, not an ordinary
+account default.
+
 ## Troubleshooting
 
 ### Certificate Bundles
