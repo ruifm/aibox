@@ -291,6 +291,26 @@ Nix sandboxing if build isolation matters.
 
 ## Troubleshooting
 
+### Certificate Bundles
+
+`aibox` preserves `SSL_CERT_FILE` and `NIX_SSL_CERT_FILE`. When either is set,
+it must name a readable regular file inside the sandbox. An empty value is an
+error. Relative paths refer to the workspace. The variables can name different
+files. Unset variables leave the client's default certificate selection intact.
+
+For NixOS or a service with a minimal environment, set both variables to the
+Nix store bundle:
+
+```nix
+SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+NIX_SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+```
+
+The check runs before the command starts and names an invalid variable without
+printing its value. It adds no mounts and does not parse certificates or prove
+that a TLS connection will succeed. TLS verification remains the client's job.
+Other client-specific certificate variables are inherited without this check.
+
 ### Ubuntu AppArmor User Namespaces
 
 On Ubuntu 24.04+, AppArmor may restrict unprivileged user namespaces. If

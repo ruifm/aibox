@@ -39,6 +39,29 @@ run_aibox() {
     [ -f "$TEST_PROJECT/hostname-write" ]
 }
 
+@test "certificate paths are checked inside the sandbox without printing values" {
+    local name path
+    touch "$TEST_HOME/secret-certificate-path"
+    for name in SSL_CERT_FILE NIX_SSL_CERT_FILE; do
+        for path in "" "$TEST_HOME/secret-certificate-path" "$TEST_PROJECT/missing" "$TEST_PROJECT"; do
+            export "$name=$path"
+            run_aibox touch command-started
+            [ "$status" -ne 0 ]
+            [[ "$output" == *"$name is not a readable certificate file inside the sandbox"* ]]
+            [[ "$output" != *"secret-certificate-path"* ]]
+            [ ! -e "$TEST_PROJECT/command-started" ]
+        done
+        unset "$name"
+    done
+}
+
+@test "distinct and relative certificate paths preserve command arguments and status" {
+    touch "$TEST_PROJECT/first bundle" "$TEST_PROJECT/second"
+    export SSL_CERT_FILE='first bundle' NIX_SSL_CERT_FILE="$TEST_PROJECT/second"
+    run_aibox bash -c 'test "$1" = '\''a b; $(false)'\'' && test "$2" = "" && test "$SSL_CERT_FILE" = "first bundle" && exit 42' _ 'a b; $(false)' ''
+    [ "$status" -eq 42 ]
+}
+
 @test "parent directory write is denied" {
     run_aibox bash -lc '! touch "$1/parent-write-denied" 2>/dev/null' _ "$TEST_PARENT"
     [ "$status" -eq 0 ]

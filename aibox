@@ -444,7 +444,20 @@ build_bwrap_args() {
     bwrap_args+=(--remount-ro / "${env_args[@]}" --chdir "$cwd_dest")
 }
 
+check_certificates() {
+    local name value
+    for name in SSL_CERT_FILE NIX_SSL_CERT_FILE; do
+        [[ ${!name+x} ]] || continue
+        value=${!name}
+        if [[ ! -f "$value" || ! -r "$value" ]]; then
+            printf >&2 'aibox: %s is not a readable certificate file inside the sandbox\n' "$name"
+            exit 1
+        fi
+    done
+}
+
 sandbox_entry() {
+    check_certificates
     local remaining=$1
     shift
     while ((remaining > 0)); do
@@ -459,10 +472,12 @@ sandbox_entry() {
 }
 
 prepare_command() {
-    ((${#required_configs[@]} > 0)) || return 0
-    command_args=("$BASH" --noprofile --norc -p -c
-        "$(declare -f sandbox_entry)"$'\nsandbox_entry "$@"'
-        aibox "${#required_configs[@]}" "${required_configs[@]}" "${command_args[@]}")
+    if ((${#required_configs[@]} == 0)) && [[ -z ${SSL_CERT_FILE+x}${NIX_SSL_CERT_FILE+x} ]]; then
+        return 0
+    fi
+    command_args=("$(realpath -e "$BASH")" --noprofile --norc -p -c
+    "$(declare -f check_certificates sandbox_entry)"$'\nsandbox_entry "$@"'
+    aibox "${#required_configs[@]}" "${required_configs[@]}" "${command_args[@]}")
 }
 
 print_command() {
