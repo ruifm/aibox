@@ -76,6 +76,7 @@
               pkgs.git
               pkgs.just
               pkgs.nix
+              pkgs.nixfmt
               pkgs.shellcheck
               pkgs.shfmt
             ];
@@ -98,27 +99,35 @@
           };
 
           shellcheck = pkgs.runCommand "aibox-shellcheck" { nativeBuildInputs = [ pkgs.shellcheck ]; } ''
-            shellcheck ${./aibox}
+            shellcheck ${./aibox} ${./tests/service-check.sh}
             touch "$out"
           '';
 
           shfmt = pkgs.runCommand "aibox-shfmt" { nativeBuildInputs = [ pkgs.shfmt ]; } ''
-            shfmt -d -i 4 -ci ${./aibox}
+            shfmt -d -i 4 -ci ${./aibox} ${./tests/service-check.sh}
             touch "$out"
           '';
 
-          unit = pkgs.runCommand "aibox-unit-tests" {
-            nativeBuildInputs = [
-              pkgs.bash
-              pkgs.bats
-              pkgs.coreutils
-            ];
-          } ''
-            cp -R ${src} source
-            cd source
-            bats tests/unit.bats
+          nixfmt = pkgs.runCommand "aibox-nixfmt" { nativeBuildInputs = [ pkgs.nixfmt ]; } ''
+            nixfmt --check ${./flake.nix} ${./tests/nixos.nix} ${./tests/tls.nix} ${./examples/systemd.nix}
             touch "$out"
           '';
+
+          unit =
+            pkgs.runCommand "aibox-unit-tests"
+              {
+                nativeBuildInputs = [
+                  pkgs.bash
+                  pkgs.bats
+                  pkgs.coreutils
+                ];
+              }
+              ''
+                cp -R ${src} source
+                cd source
+                bats tests/unit.bats
+                touch "$out"
+              '';
         }
       );
     };

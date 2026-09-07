@@ -350,7 +350,67 @@ permit commands on the host through the shared network, outside the filesystem
 boundary. Credential access is an explicit operator choice, not an ordinary
 account default.
 
+## Systemd Services
+
+[The NixOS service example](examples/systemd.nix) runs a project command as the
+dedicated `aibox` account. The VM test imports this same example. For a NixOS
+flake with an `aibox` input, include it in the host configuration:
+
+```nix
+imports = [
+  (import "${inputs.aibox}/examples/systemd.nix" {
+    aibox = inputs.aibox.packages.${pkgs.stdenv.hostPlatform.system}.default;
+    workspace = "/srv/project";
+    command = [ "${pkgs.nix}/bin/nix" "develop" "--command" "project-task" ];
+    hostname = "project-agent";
+    requiredConfig = [
+      "/etc/codex/managed_config.toml"
+      "/etc/codex/requirements.toml"
+    ];
+  })
+];
+```
+
+Provision the checkout and its devShell outside the sandbox. The `aibox` account
+must own the workspace. Enable Nix flakes for this command, and provision the
+required policy files through `environment.etc`. Omit `requiredConfig` for a
+command that does not need these files. Start or inspect the service with
+`systemctl start aibox` and `journalctl -u aibox`, outside the sandbox.
+
+The service supplies explicit command paths and a clean environment, including
+both certificate variables. Persistent agent state lives in `/var/lib/aibox`,
+with mode 0700. `ProtectSystem=strict` permits host writes only to the workspace
+and the systemd state directory. Bubblewrap then limits access within those
+paths to its normal mount policy. The complete host state directory is not bound
+into the sandbox.
+
+The tested service uses `ProtectHostname=private`, `ProtectKernelLogs=no`, and
+`ProtectKernelTunables=no`. It retains `ProtectKernelModules=yes`,
+`PrivateTmp=yes`, `ProtectClock=yes`, `ProtectControlGroups=yes`, and
+`ProtectProc=invisible`. These settings were tested together with the locked
+nixpkgs. The service manages process lifetime; aibox does not manage sessions.
+
 ## Troubleshooting
+
+### Service Restrictions
+
+Bubblewrap prints its original startup error. Check the unit's journal and
+restrictions before changing host-wide settings:
+
+| Error | Check |
+| --- | --- |
+| `Can't set hostname` | `ProtectHostname=yes` prohibits the syscall; the example uses `private` |
+| `Can't mount proc` | `ProtectKernelLogs` and `ProtectKernelTunables` each caused this failure in the VM test |
+| `No permissions to create a new namespace` | Check `RestrictNamespaces`, syscall filters, and host user-namespace restrictions |
+| Mount permission error | A filter such as `SystemCallFilter=~@mount` prevents Bubblewrap setup |
+| Writable state creation fails | Check ownership, `StateDirectory`, `ReadWritePaths`, and any `ProtectHome` setting |
+
+The same `EPERM` can have several causes. These messages do not identify one
+specific unit setting on every host. A syscall filter can also terminate the
+process with `SIGSYS` before Bubblewrap can print an error. Do not remove the
+whole service restriction set to repair a single conflict. See the
+[systemd execution reference](https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html)
+for the scope of each setting.
 
 ### Certificate Bundles
 

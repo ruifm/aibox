@@ -15,6 +15,7 @@ Host prerequisites for development without `nix develop`:
 - Bubblewrap
 - ShellCheck
 - shfmt
+- nixfmt
 - Bats
 - just
 - Nix with the daemon running
@@ -38,6 +39,10 @@ just check
 `just test-nixos` and `nix flake check` also run a NixOS VM. The Nix builder must
 have access to `/dev/kvm` and advertise the `kvm` and `nixos-test` system features.
 The VM uses the repository's locked nixpkgs. No host `/etc` changes are needed.
+
+The VM runs the packaged launcher through the service example, including
+NixOS policy links, two accounts, restart behavior, and TLS. Certificate keys
+in the test fixture are test data. The TLS tests need no external endpoint.
 
 ## Code Style
 
