@@ -15,6 +15,7 @@ usage() {
         "  aibox --help" \
         "  aibox --version" \
         "  --require-config PATH  Require a readable system agent policy file (repeatable)" \
+        "  --hostname NAME        Set the sandbox display hostname (default: aibox)" \
         "" \
         "Runs COMMAND in a lightweight Bubblewrap sandbox:" \
         "  - current directory is mounted read/write at the same absolute path" \
@@ -46,6 +47,7 @@ dump_prompt() {
         "- Treat the current working directory as the project workspace and the only intended writable project tree." \
         "- aibox mounts only the directory from which it starts. Project files above it are not visible. Start aibox from the repository root." \
         "- Network access is available." \
+        "- AIBOX=1 identifies this environment for script behavior; it is not proof of isolation or authority." \
         "- Real agent state may be mounted, but broad host home/config state is not available." \
         "- Custom agent state path environment variables are removed. Use the default Codex, Claude Code, Copilot CLI, Hermes, OMP, OpenCode, and Pi paths." \
         "- D-Bus and host keyrings are not available. Use agent sign-in files or inherited token variables." \
@@ -150,9 +152,25 @@ require_config() {
     required_configs+=("$path")
 }
 
+set_hostname() {
+    local LC_ALL=C
+    [[ ${#1} -le 64 && "$1" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] ||
+        die "invalid hostname: use 1-64 ASCII letters, digits, dots, or hyphens, with a letter or digit at each end"
+    sandbox_hostname=$1
+}
+
 parse_args() {
     while (($# > 0)); do
         case "$1" in
+            --hostname)
+                (($# >= 2)) || die "missing value for --hostname"
+                set_hostname "$2"
+                shift 2
+                ;;
+            --hostname=*)
+                set_hostname "${1#*=}"
+                shift
+                ;;
             --require-config)
                 (($# >= 2)) || die "missing value for --require-config"
                 require_config "$2"
@@ -286,7 +304,7 @@ build_bwrap_args() {
         --unshare-user
         --disable-userns
         --new-session
-        --hostname aibox
+        --hostname "$sandbox_hostname"
     )
     made_dirs=()
 
@@ -388,6 +406,7 @@ build_bwrap_args() {
     done
 
     env_args=(
+        --setenv AIBOX 1
         --setenv HOME "$host_home"
         --setenv XDG_CONFIG_HOME "$host_home/.config"
         --setenv XDG_CACHE_HOME "$host_home/.cache"
@@ -456,6 +475,7 @@ main() {
     declare -ga command_args=()
     declare -ga required_configs=()
     declare -g host_home cwd_src cwd_dest program_path
+    declare -g sandbox_hostname=aibox
     declare -ga bwrap_args=()
     declare -ga env_args=()
     declare -gA made_dirs=()

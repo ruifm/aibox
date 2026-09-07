@@ -169,6 +169,26 @@ assert_arg_sequence() {
     [[ "$output" == *"missing value for --require-config"* ]]
 }
 
+@test "hostname accepts both option forms and stops parsing at the command" {
+    run bash -c 'cd "$1" && HOME="$2" bash "$3" --hostname first --hostname=project-agent -- printf --hostname=argument' _ "$TEST_PROJECT" "$TEST_HOME" "$AIBOX"
+    [ "$status" -eq 0 ]
+    assert_arg_sequence --hostname project-agent
+    assert_arg_sequence --setenv AIBOX 1
+    assert_arg_sequence printf --hostname=argument
+}
+
+@test "hostname rejects missing and invalid values" {
+    local name
+    for name in "" -bad bad- '.bad' 'bad.' 'bad name' 'bad/name' "$(printf '%065d' 0)"; do
+        run bash "$AIBOX" --hostname="$name" true
+        [ "$status" -ne 0 ]
+        [[ "$output" == *"invalid hostname"* ]]
+    done
+    run bash "$AIBOX" --hostname
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"missing value for --hostname"* ]]
+}
+
 @test "prints bwrap command before running it" {
     run_aibox true
     [ "$status" -eq 0 ]

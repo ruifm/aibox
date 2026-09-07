@@ -33,6 +33,12 @@ run_aibox() {
     [ "$(cat "$TEST_PROJECT/created-by-aibox")" = "ok" ]
 }
 
+@test "hostname changes display identity but keeps detection and workspace" {
+    run bash -c 'cd "$1" && HOME="$2" AIBOX=foreign "$3" --hostname=project-agent -- bash -c '\''test "$AIBOX" = 1 && test "$(cat /proc/sys/kernel/hostname)" = project-agent && test "$PWD" = "$1" && touch hostname-write'\'' _ "$1"' _ "$TEST_PROJECT" "$TEST_HOME" "$AIBOX"
+    [ "$status" -eq 0 ]
+    [ -f "$TEST_PROJECT/hostname-write" ]
+}
+
 @test "parent directory write is denied" {
     run_aibox bash -lc '! touch "$1/parent-write-denied" 2>/dev/null' _ "$TEST_PARENT"
     [ "$status" -eq 0 ]

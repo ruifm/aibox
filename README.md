@@ -92,6 +92,18 @@ aibox codex
 it from a directory below the repository root, parent files such as `.git`,
 `AGENTS.md`, `CLAUDE.md`, and agent settings are not visible.
 
+## Display Name and Detection
+
+Use `aibox --hostname project-agent -- codex` to set a display name. The default
+is `aibox`. Names contain 1-64 ASCII letters, digits, dots, or hyphens, with a
+letter or digit at each end. `--hostname=project-agent` also works.
+
+Scripts can use `[ "${AIBOX:-}" = 1 ]` to select sandbox behavior. The marker is
+set inside every sandbox, including when the hostname changes. It does not prove
+isolation or grant authority. Replace hostname checks with this marker and
+remove source patches for `--hostname aibox`. The option changes no mounts or
+credential policy.
+
 ## OpenRouter
 
 Install [Ori](https://openrouter.ai/ori/harness) and the agent in a project
