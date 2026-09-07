@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 set -euo pipefail
 
-readonly VERSION="0.1.0"
+readonly VERSION="0.2.0"
 readonly PROGRAM_NAME="aibox"
 readonly SANDBOX_AIBOX_DIR="/run/aibox/bin"
 readonly SANDBOX_AIBOX_PATH="${SANDBOX_AIBOX_DIR}/aibox"

@@ -23,7 +23,7 @@
         {
           default = pkgs.stdenvNoCC.mkDerivation {
             pname = "aibox";
-            version = "0.1.0";
+            version = "0.2.0";
             src = ./.;
 
             nativeBuildInputs = [ pkgs.makeWrapper ];
@@ -70,6 +70,7 @@
           default = pkgs.mkShell {
             packages = [
               pkgs.bash
+              pkgs.actionlint
               pkgs.bats
               pkgs.bubblewrap
               pkgs.coreutils
@@ -99,17 +100,35 @@
           };
 
           shellcheck = pkgs.runCommand "aibox-shellcheck" { nativeBuildInputs = [ pkgs.shellcheck ]; } ''
-            shellcheck ${./aibox} ${./tests/service-check.sh}
+            shellcheck ${./aibox} ${./tests/service-check.sh} ${./scripts/check-release.sh}
             touch "$out"
           '';
 
           shfmt = pkgs.runCommand "aibox-shfmt" { nativeBuildInputs = [ pkgs.shfmt ]; } ''
-            shfmt -d -i 4 -ci ${./aibox} ${./tests/service-check.sh}
+            shfmt -d -i 4 -ci ${./aibox} ${./tests/service-check.sh} ${./scripts/check-release.sh}
             touch "$out"
           '';
 
           nixfmt = pkgs.runCommand "aibox-nixfmt" { nativeBuildInputs = [ pkgs.nixfmt ]; } ''
             nixfmt --check ${./flake.nix} ${./tests/nixos.nix} ${./tests/tls.nix} ${./examples/systemd.nix}
+            touch "$out"
+          '';
+
+          workflows =
+            pkgs.runCommand "aibox-workflows"
+              {
+                nativeBuildInputs = [
+                  pkgs.actionlint
+                  pkgs.shellcheck
+                ];
+              }
+              ''
+                actionlint ${./.github/workflows/ci.yml}
+                touch "$out"
+              '';
+
+          version = pkgs.runCommand "aibox-version" { nativeBuildInputs = [ pkgs.bash ]; } ''
+            test "$(bash ${./aibox} --version)" = "aibox ${self.packages.${system}.default.version}"
             touch "$out"
           '';
 
@@ -125,7 +144,7 @@
               ''
                 cp -R ${src} source
                 cd source
-                bats tests/unit.bats
+                bats tests/unit.bats tests/release.bats
                 touch "$out"
               '';
         }

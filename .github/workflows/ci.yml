@@ -4,9 +4,13 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ['v*']
   pull_request:
     branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   check:
@@ -21,7 +25,10 @@ jobs:
 
       - name: Check VM test support
         run: |
-          test -r /dev/kvm && test -w /dev/kvm || { echo "::error::NixOS tests require access to /dev/kvm"; exit 1; }
+          if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+            echo "::error::NixOS tests require access to /dev/kvm"
+            exit 1
+          fi
 
       - name: Allow Bubblewrap user namespaces in CI
         run: |
@@ -38,6 +45,12 @@ jobs:
       - name: Integration tests
         run: nix develop -c just test-integration
 
+      - name: Check release version and notes
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: nix develop -c just check-release "$RELEASE_TAG"
+
       - name: Verify generated changes are committed
         run: |
           if ! git diff --quiet; then
@@ -45,3 +58,19 @@ jobs:
             git --no-pager diff
             exit 1
           fi
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: check
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG" \
+            --notes-file "docs/releases/$RELEASE_TAG.md"

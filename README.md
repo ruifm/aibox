@@ -36,13 +36,13 @@ dedicated persistent state/config mounts.
 Nix is the recommended installation method:
 
 ```sh
-nix profile install github:ruifm/aibox
+nix profile install github:ruifm/aibox/v0.2.0
 ```
 
 Run without installing:
 
 ```sh
-nix run github:ruifm/aibox -- codex
+nix run github:ruifm/aibox/v0.2.0 -- codex
 ```
 
 From a clone:
@@ -55,7 +55,7 @@ Secondary direct-script install:
 
 ```sh
 mkdir -p ~/.local/bin
-curl -fsSL https://raw.githubusercontent.com/ruifm/aibox/main/aibox -o ~/.local/bin/aibox
+curl -fsSL https://raw.githubusercontent.com/ruifm/aibox/v0.2.0/aibox -o ~/.local/bin/aibox
 chmod +x ~/.local/bin/aibox
 ```
 
@@ -66,6 +66,24 @@ aibox -- true && echo "aibox smoke check passed"
 ```
 
 This also creates the known persistent agent state paths when they are missing.
+
+### Updates
+
+Select a tested version from [GitHub Releases](https://github.com/ruifm/aibox/releases).
+Each release includes compatibility notes for mounts, environment handling, and
+command-line changes. Published version tags are not moved.
+
+For a host or project flake, pin the selected tag:
+
+```nix
+inputs.aibox.url = "github:ruifm/aibox/v0.2.0";
+```
+
+Commit the flake lock with its exact revision and NAR hash. To update, change the
+tag, run `nix flake update aibox`, and test the locked result before deployment.
+Release automation can select a GitHub release and retain that same exact lock.
+`main` remains the development branch. Sandbox startup does not check for or
+install updates. See the [0.2.0 compatibility notes](docs/releases/v0.2.0.md).
 
 ## Quick Start
 
@@ -379,8 +397,9 @@ command that does not need these files. Start or inspect the service with
 
 The service supplies explicit command paths and a clean environment, including
 both certificate variables. Persistent agent state lives in `/var/lib/aibox`,
-with mode 0700. `ProtectSystem=strict` permits host writes only to the workspace
-and the systemd state directory. Bubblewrap then limits access within those
+with mode 0700. `ProtectSystem=strict` restricts persistent filesystem writes,
+with writable exceptions for the workspace and the systemd state directory.
+`PrivateTmp` supplies separate temporary directories. Bubblewrap limits access within those
 paths to its normal mount policy. The complete host state directory is not bound
 into the sandbox.
 

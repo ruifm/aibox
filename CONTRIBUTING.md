@@ -16,6 +16,7 @@ Host prerequisites for development without `nix develop`:
 - ShellCheck
 - shfmt
 - nixfmt
+- actionlint
 - Bats
 - just
 - Nix with the daemon running
@@ -43,6 +44,23 @@ The VM uses the repository's locked nixpkgs. No host `/etc` changes are needed.
 The VM runs the packaged launcher through the service example, including
 NixOS policy links, two accounts, restart behavior, and TLS. Certificate keys
 in the test fixture are test data. The TLS tests need no external endpoint.
+
+## Releases
+
+Set the same version in the launcher and Nix package, and add
+`docs/releases/vX.Y.Z.md`. Describe mount, environment, and CLI compatibility
+changes with the required migration steps. Run:
+
+```sh
+nix develop -c just check check-release v0.2.0
+nix develop -c just test-integration
+nix flake check -L
+```
+
+The maintainer creates and pushes the corresponding `vX.Y.Z` tag after review.
+CI tests the tagged commit, checks its versions and release notes, then publishes
+the GitHub release. Publication uses the existing tag and its checked-in notes.
+It does not replace existing releases. Do not move published version tags.
 
 ## Code Style
 

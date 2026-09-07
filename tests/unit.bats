@@ -103,7 +103,7 @@ assert_arg_sequence() {
 
     run env PATH="${BATS_TEST_TMPDIR}/empty-path" "$BASH" "$AIBOX" --version
     [ "$status" -eq 0 ]
-    [ "$output" = "aibox 0.1.0" ]
+    [ "$output" = "aibox 0.2.0" ]
 }
 
 @test "--help does not require bwrap" {
