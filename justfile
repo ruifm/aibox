@@ -18,6 +18,9 @@ test-unit:
 test-integration:
     bats tests/integration.bats
 
+test-nixos:
+    nix build --no-link -L '.#checks.'$(nix eval --impure --raw --expr builtins.currentSystem)'.nixos'
+
 check: fmt lint test-unit
 
 install:

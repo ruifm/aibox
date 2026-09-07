@@ -16,6 +16,12 @@ jobs:
 
       - name: Install Nix
         uses: DeterminateSystems/determinate-nix-action@v3
+        with:
+          kvm: true
+
+      - name: Check VM test support
+        run: |
+          test -r /dev/kvm && test -w /dev/kvm || { echo "::error::NixOS tests require access to /dev/kvm"; exit 1; }
 
       - name: Allow Bubblewrap user namespaces in CI
         run: |

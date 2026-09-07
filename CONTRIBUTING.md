@@ -29,10 +29,15 @@ just fmt
 just lint
 just test-unit
 just test-integration
+just test-nixos
 just check
 ```
 
 `just check` is the default CI gate. Run it before opening a pull request.
+
+`just test-nixos` and `nix flake check` also run a NixOS VM. The Nix builder must
+have access to `/dev/kvm` and advertise the `kvm` and `nixos-test` system features.
+The VM uses the repository's locked nixpkgs. No host `/etc` changes are needed.
 
 ## Code Style
 

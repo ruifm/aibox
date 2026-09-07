@@ -151,6 +151,24 @@ assert_arg_sequence() {
     [[ "$output" == *"unknown option: --bogus"* ]]
 }
 
+@test "required config options preserve paths and command arguments" {
+    run bash -c 'cd "$1" && HOME="$2" bash "$3" --require-config /etc/codex/requirements.toml --require-config="/etc/claude-code/policy file.json" -- printf "%s" "a b"' _ "$TEST_PROJECT" "$TEST_HOME" "$AIBOX"
+    [ "$status" -eq 0 ]
+    assert_arg_sequence /etc/codex/requirements.toml "/etc/claude-code/policy file.json" printf "%s" "a b"
+}
+
+@test "required config rejects paths outside the fixed directories" {
+    local path
+    for path in relative /etc/codex-other/file /etc/codex/../shadow /etc/codex/./file /etc/static/codex/file /etc/codex ""; do
+        run bash "$AIBOX" --require-config="$path" -- true
+        [ "$status" -ne 0 ]
+        [[ "$output" == *"invalid required config path"* ]]
+    done
+    run bash "$AIBOX" --require-config
+    [ "$status" -ne 0 ]
+    [[ "$output" == *"missing value for --require-config"* ]]
+}
+
 @test "prints bwrap command before running it" {
     run_aibox true
     [ "$status" -eq 0 ]

@@ -92,6 +92,11 @@
         {
           package = self.packages.${system}.default;
 
+          nixos = import ./tests/nixos.nix {
+            inherit pkgs;
+            aibox = self.packages.${system}.default;
+          };
+
           shellcheck = pkgs.runCommand "aibox-shellcheck" { nativeBuildInputs = [ pkgs.shellcheck ]; } ''
             shellcheck ${./aibox}
             touch "$out"

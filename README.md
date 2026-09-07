@@ -217,6 +217,25 @@ System agent config mounts are read-only and are added only when they exist:
 - `/etc/hermes`
 - `/etc/opencode`
 
+On NixOS, the matching `/etc/static` subdirectories are also mounted read-only.
+This includes the existing Nix and certificate directories. The complete host
+`/etc/static` directory is not mounted. Links to arbitrary host targets are not
+followed to add mounts. Nix store contents remain readable through `/nix/store`.
+
+To require system policy files before a command starts:
+
+```sh
+aibox --require-config /etc/codex/managed_config.toml \
+  --require-config=/etc/codex/requirements.toml -- codex
+```
+
+Each path must be an absolute file path below one of the five system agent
+directories above, without `.` or `..` components. The check runs inside the
+sandbox and stops startup if a file is missing or unreadable. The option does
+not add mounts or check whether the agent obeys the policy. Without the option,
+missing system configuration remains optional. NixOS packages can remove their
+source patches for `/etc/static/codex`.
+
 `aibox` uses the default agent state paths. It removes `CODEX_HOME`,
 `CODEX_SQLITE_HOME`, `CLAUDE_CONFIG_DIR`, `ANTHROPIC_CONFIG_DIR`,
 `COPILOT_HOME`, `COPILOT_CACHE_HOME`, `HERMES_HOME`, `HERMES_MANAGED_DIR`,

@@ -10,10 +10,11 @@ readonly SANDBOX_AIBOX_PATH="${SANDBOX_AIBOX_DIR}/aibox"
 usage() {
     printf '%s\n' \
         "Usage:" \
-        "  aibox [--] [COMMAND [ARGS...]]" \
+        "  aibox [OPTIONS] [--] [COMMAND [ARGS...]]" \
         "  aibox -p|--dump-prompt" \
         "  aibox --help" \
         "  aibox --version" \
+        "  --require-config PATH  Require a readable system agent policy file (repeatable)" \
         "" \
         "Runs COMMAND in a lightweight Bubblewrap sandbox:" \
         "  - current directory is mounted read/write at the same absolute path" \
@@ -137,9 +138,30 @@ add_host_symlink_or_ro_bind() {
     fi
 }
 
+require_config() {
+    local path=$1
+    case "$path" in
+        /etc/codex/?* | /etc/claude-code/?* | /etc/github-copilot/?* | /etc/hermes/?* | /etc/opencode/?*) ;;
+        *) die "invalid required config path: $path" ;;
+    esac
+    case "/${path}/" in
+        */./* | */../*) die "invalid required config path: $path" ;;
+    esac
+    required_configs+=("$path")
+}
+
 parse_args() {
     while (($# > 0)); do
         case "$1" in
+            --require-config)
+                (($# >= 2)) || die "missing value for --require-config"
+                require_config "$2"
+                shift 2
+                ;;
+            --require-config=*)
+                require_config "${1#*=}"
+                shift
+                ;;
             -h | --help)
                 usage
                 exit 0
@@ -342,12 +364,17 @@ build_bwrap_args() {
         /etc/hosts \
         /etc/resolv.conf \
         /etc/localtime \
-        /etc/locale.conf \
+        /etc/locale.conf; do
+        add_ro_bind "$path" "$path"
+    done
+
+    for path in \
         /etc/nix \
         /etc/ssl \
         /etc/ca-certificates \
         /etc/pki; do
         add_ro_bind "$path" "$path"
+        add_ro_bind "/etc/static/${path#/etc/}"
     done
 
     for path in \
@@ -357,6 +384,7 @@ build_bwrap_args() {
         /etc/hermes \
         /etc/opencode; do
         add_ro_bind_try "$path" "$path"
+        add_ro_bind "/etc/static/${path#/etc/}"
     done
 
     env_args=(
@@ -397,6 +425,27 @@ build_bwrap_args() {
     bwrap_args+=(--remount-ro / "${env_args[@]}" --chdir "$cwd_dest")
 }
 
+sandbox_entry() {
+    local remaining=$1
+    shift
+    while ((remaining > 0)); do
+        if [[ ! -f "$1" || ! -r "$1" ]]; then
+            printf >&2 'aibox: required config is not a readable regular file: %q\n' "$1"
+            exit 1
+        fi
+        shift
+        remaining=$((remaining - 1))
+    done
+    exec "$@"
+}
+
+prepare_command() {
+    ((${#required_configs[@]} > 0)) || return 0
+    command_args=("$BASH" --noprofile --norc -p -c
+        "$(declare -f sandbox_entry)"$'\nsandbox_entry "$@"'
+        aibox "${#required_configs[@]}" "${required_configs[@]}" "${command_args[@]}")
+}
+
 print_command() {
     printf >&2 '%s: ' "${PROGRAM_NAME}"
     printf >&2 '%q ' bwrap "${bwrap_args[@]}" -- "${command_args[@]}"
@@ -405,6 +454,7 @@ print_command() {
 
 main() {
     declare -ga command_args=()
+    declare -ga required_configs=()
     declare -g host_home cwd_src cwd_dest program_path
     declare -ga bwrap_args=()
     declare -ga env_args=()
@@ -423,6 +473,7 @@ main() {
     resolve_program_path
     prepare_host_state
     build_bwrap_args
+    prepare_command
     print_command
 
     bwrap "${bwrap_args[@]}" -- "${command_args[@]}"
